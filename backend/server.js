@@ -77,13 +77,13 @@ app.use((req, res) => {
 });
 
 // Start server
-if (process.env.NODE_ENV !== 'production' || !process.env.RENDER) {
+
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
   });
-}
+
 
 // Export for serverless functions (Render, Vercel, etc.)
 module.exports = app;
