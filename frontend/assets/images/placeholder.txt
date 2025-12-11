@@ -1,0 +1,3 @@
+Placeholder for movie poster images.
+In production, replace with actual placeholder image or use a CDN service.
+

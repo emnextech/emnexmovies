@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <title>Emnexmovies - Home</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="assets/images/website-icon.png">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="css/custom.css">
+    <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="index.html">
+                <img src="assets/images/website-icon.png" alt="Emnexmovies" class="navbar-brand-icon"> Emnexmovies
+            </a>
+            <!-- Mobile Search Icon -->
+            <button class="btn btn-link mobile-search-icon d-lg-none" id="mobile-search-toggle" type="button">
+                <i class="bi bi-search"></i>
+            </button>
+            <!-- Desktop Search -->
+            <div class="navbar-search-centered d-none d-lg-flex">
+                <form id="search-form" class="d-flex" action="search.html" method="get">
+                    <div class="search-input-wrapper position-relative">
+                        <input type="text" class="form-control form-control-sm" id="search-input" name="q" placeholder="Search movies..." autocomplete="off">
+                        <button class="btn btn-primary btn-sm" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                        <div id="autocomplete-container" class="autocomplete-dropdown" style="display: none;"></div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <!-- Mobile Search Bar (below navbar) -->
+        <div class="mobile-search-bar d-lg-none" id="mobile-search-bar" style="display: none;">
+            <div class="container-fluid px-3">
+                <form id="mobile-search-form" class="d-flex" action="search.html" method="get">
+                    <div class="search-input-wrapper position-relative w-100">
+                        <input type="text" class="form-control form-control-sm" id="mobile-search-input" name="q" placeholder="Search movies..." autocomplete="off">
+                        <button class="btn btn-primary btn-sm" type="submit">
+                            <i class="bi bi-search"></i>
+                        </button>
+                        <button class="btn btn-secondary btn-sm ms-2" type="button" id="mobile-search-close">
+                            <i class="bi bi-x"></i>
+                        </button>
+                        <div id="mobile-autocomplete-container" class="autocomplete-dropdown" style="display: none;"></div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid px-3 px-md-4" style="margin-top: 76px;">
+        <!-- Dynamic Home Sections -->
+        <div id="home-sections"></div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-dark-surface text-center py-4 mt-5">
+        <div class="container">
+            <p class="text-muted mb-2">
+                Disclaimer: We do not store any files on our server. All contents are provided by non-affiliated third parties. We just index those links which are already available in internet.
+            </p>
+            <p class="mb-0" style="color: var(--text-secondary);">&copy; <span id="copyright-year"></span> Emnexmovies. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="js/api.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/download.js"></script>
+    <script src="js/search.js"></script>
+    <script src="js/main.js"></script>
+    <!-- Section title cleanup and filtering -->
+    <script>
+        // Function to clean title - remove emojis and extra whitespace
+        function cleanSectionTitle(title) {
+            if (!title) return '';
+            // Remove emojis (Unicode emoji ranges)
+            let cleaned = title.replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+                               .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Misc Symbols and Pictographs
+                               .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport and Map
+                               .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, '') // Flags
+                               .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols
+                               .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+                               .replace(/[\u{FE00}-\u{FE0F}]/gu, '')   // Variation Selectors
+                               .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental Symbols
+                               .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '') // Chess Symbols
+                               .replace(/[\u{1FA70}-\u{1FAFF}]/gu, '') // Symbols and Pictographs Extended-A
+                               .trim();
+            // Remove multiple spaces
+            cleaned = cleaned.replace(/\s+/g, ' ').trim();
+            return cleaned;
+        }
+        
+        // Use MutationObserver to clean titles and filter sections after they're rendered
+        document.addEventListener('DOMContentLoaded', function() {
+            const homeSections = document.getElementById('home-sections');
+            if (!homeSections) return;
+            
+            const observer = new MutationObserver(function(mutations) {
+                mutations.forEach(function(mutation) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1 && node.nodeName !== 'SCRIPT') { // Element node, but not script tags
+                            // Find all section titles and clean them
+                            const sectionTitles = node.querySelectorAll ? node.querySelectorAll('.section-title') : [];
+                            sectionTitles.forEach(function(titleElement) {
+                                const currentTitle = titleElement.textContent;
+                                
+                                // Remove "Upcoming Calendar" sections
+                                if (currentTitle.toLowerCase().includes('upcoming calendar')) {
+                                    const section = titleElement.closest('.movie-section, section');
+                                    if (section) {
+                                        section.remove();
+                                        return;
+                                    }
+                                }
+                                
+                                // Clean emojis from titles
+                                const cleanedTitle = cleanSectionTitle(currentTitle);
+                                if (cleanedTitle !== currentTitle) {
+                                    titleElement.textContent = cleanedTitle;
+                                }
+                            });
+                            
+                            // Also check if the node itself is a section with title
+                            if (node.classList && (node.classList.contains('movie-section') || node.tagName === 'SECTION')) {
+                                const titleElement = node.querySelector('.section-title');
+                                if (titleElement) {
+                                    const title = titleElement.textContent;
+                                    
+                                    // Remove "Upcoming Calendar" sections
+                                    if (title.toLowerCase().includes('upcoming calendar')) {
+                                        node.remove();
+                                        return;
+                                    }
+                                    
+                                    // Clean emojis from titles
+                                    const cleanedTitle = cleanSectionTitle(title);
+                                    if (cleanedTitle !== title) {
+                                        titleElement.textContent = cleanedTitle;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+            });
+            
+            observer.observe(homeSections, {
+                childList: true,
+                subtree: true
+            });
+            
+            // Also clean existing sections on initial load (in case they load before observer is set up)
+            setTimeout(function() {
+                const existingSections = homeSections.querySelectorAll('.movie-section, section');
+                existingSections.forEach(function(section) {
+                    const titleElement = section.querySelector('.section-title');
+                    if (titleElement) {
+                        const title = titleElement.textContent;
+                        
+                        // Remove "Upcoming Calendar" sections
+                        if (title.toLowerCase().includes('upcoming calendar')) {
+                            section.remove();
+                            return;
+                        }
+                        
+                        // Clean emojis from titles
+                        const cleanedTitle = cleanSectionTitle(title);
+                        if (cleanedTitle !== title) {
+                            titleElement.textContent = cleanedTitle;
+                        }
+                    }
+                });
+            }, 100);
+        });
+    </script>
+    <!-- Set copyright year dynamically -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const yearElement = document.getElementById('copyright-year');
+            if (yearElement) {
+                yearElement.textContent = new Date().getFullYear();
+            }
+        });
+    </script>
+</body>
+</html>
+
+
