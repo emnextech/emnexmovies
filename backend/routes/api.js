@@ -415,12 +415,27 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
       status: error.response?.status,
       statusText: error.response?.statusText,
       data: error.response?.data,
+      code: error.code,
+      message: error.message,
     });
-    res.status(error.response?.status || 500).json({
+    
+    // Return more detailed error for debugging on Vercel
+    const errorResponse = {
       error: 'Failed to fetch download metadata',
       message: error.message,
       details: error.response?.data || 'No additional details available',
-    });
+    };
+    
+    // Include additional debugging info in development
+    if (process.env.NODE_ENV === 'development' || process.env.VERCEL_ENV) {
+      errorResponse.debug = {
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+      };
+    }
+    
+    res.status(error.response?.status || 500).json(errorResponse);
   }
 });
 

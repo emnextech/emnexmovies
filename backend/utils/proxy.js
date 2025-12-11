@@ -44,7 +44,7 @@ async function makeRequest(endpoint, options = {}) {
           method,
           url,
           headers: requestHeaders,
-          timeout: 30000, // 30 seconds
+          timeout: 60000, // 60 seconds (increased for Vercel)
         };
 
         if (data) {
