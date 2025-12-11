@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: movie-website-backend
+    env: node
+    plan: starter
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: ALLOWED_ORIGINS
+        sync: false  # Set this in Render dashboard with your Vercel frontend URL
+      - key: MOVIEBOX_API_HOST
+        value: https://h5.aoneroom.com
+    healthCheckPath: /health
+    autoDeploy: true
+

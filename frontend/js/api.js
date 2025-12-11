@@ -1,7 +1,25 @@
 /**
  * API Client
  * Handles all API requests to the backend
+ * Requires config.js to be loaded first
  */
+
+/**
+ * Get API configuration
+ * @returns {Object} Config object with buildApiUrl method
+ */
+function getConfig() {
+  if (typeof window !== 'undefined' && window.appConfig) {
+    return window.appConfig;
+  }
+  // Fallback if config not loaded
+  return {
+    buildApiUrl: (endpoint) => {
+      const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      return path;
+    },
+  };
+}
 
 /**
  * Make API request
@@ -11,16 +29,17 @@
  */
 async function apiRequest(endpoint, options = {}) {
   const { method = 'GET', data = null, params = null } = options;
+  const config = getConfig();
 
-  const config = {
+  const requestConfig = {
     method,
     headers: {
       'Content-Type': 'application/json',
     },
   };
 
-  // Use endpoint directly (matches API_ENDPOINTS_GUIDE.md)
-  let url = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  // Build full URL using config
+  let url = config.buildApiUrl(endpoint);
 
   if (params) {
     const queryString = new URLSearchParams(params).toString();
@@ -28,11 +47,11 @@ async function apiRequest(endpoint, options = {}) {
   }
 
   if (data && method !== 'GET') {
-    config.body = JSON.stringify(data);
+    requestConfig.body = JSON.stringify(data);
   }
 
   try {
-    const response = await fetch(url, config);
+    const response = await fetch(url, requestConfig);
     
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Request failed' }));
@@ -283,9 +302,10 @@ async function getRecommendations(subjectId, page = 1, perPage = 24) {
 function download(url, filename, onProgress = null) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
+    const config = getConfig();
     
-    // Build download URL
-    const downloadUrl = `${API_BASE_URL}/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    // Build download URL using config
+    const downloadUrl = config.buildApiUrl(`/api/download?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`);
 
     xhr.open('GET', downloadUrl, true);
     xhr.responseType = 'blob';
@@ -336,7 +356,8 @@ function download(url, filename, onProgress = null) {
 function downloadSubtitle(url, filename) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const downloadUrl = `${API_BASE_URL}/download-subtitle?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`;
+    const config = getConfig();
+    const downloadUrl = config.buildApiUrl(`/api/download-subtitle?url=${encodeURIComponent(url)}&filename=${encodeURIComponent(filename)}`);
 
     xhr.open('GET', downloadUrl, true);
     xhr.responseType = 'blob';

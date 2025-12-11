@@ -6,7 +6,6 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 
 const apiRoutes = require('./routes/api');
 const downloadRoutes = require('./routes/download');
@@ -14,9 +13,24 @@ const downloadRoutes = require('./routes/download');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// CORS configuration - allow requests from frontend
+const allowedOrigins = process.env.ALLOWED_ORIGINS 
+  ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:8080']; // Default to common dev ports
+
 // Middleware
 app.use(cors({
-  origin: '*', // In production, specify your frontend URL
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
@@ -29,9 +43,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Serve static files from frontend directory
-app.use(express.static(path.join(__dirname, '../frontend')));
-
 // API Routes - Register at guide paths (root level)
 app.use('/', apiRoutes);
 app.use('/api', apiRoutes); // Backward compatibility
@@ -39,18 +50,11 @@ app.use('/api', downloadRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Test endpoint for Vercel debugging
-app.get('/api/test', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    vercel: process.env.VERCEL === '1',
-    path: req.path,
-    url: req.url,
+    service: 'movie-website-backend',
+    version: '1.0.0',
   });
 });
 
@@ -63,25 +67,24 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
+// 404 handler - API only, return JSON
 app.use((req, res) => {
-  // For API endpoints, return JSON
-  if (req.path.startsWith('/api') || req.path.startsWith('/wefeed-h5-bff') || req.path.startsWith('/health')) {
-    res.status(404).json({ error: 'Not found', message: 'The requested API endpoint does not exist' });
-  } else {
-    // For frontend routes, serve the 404.html page
-    res.status(404).sendFile(path.join(__dirname, '../frontend/404.html'));
-  }
+  res.status(404).json({ 
+    error: 'Not found', 
+    message: 'The requested API endpoint does not exist',
+    path: req.path,
+  });
 });
 
-// Start server (only in development or when not on Vercel)
-if (process.env.VERCEL !== '1') {
+// Start server
+if (process.env.NODE_ENV !== 'production' || !process.env.RENDER) {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
   });
 }
 
-// Export for Vercel serverless functions
+// Export for serverless functions (Render, Vercel, etc.)
 module.exports = app;
 
