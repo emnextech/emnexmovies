@@ -7,6 +7,59 @@ const axios = require('axios');
 const { HOST_URL, MIRROR_HOSTS } = require('../config/constants');
 const { getDefaultHeaders } = require('./headers');
 
+// Track if cookies have been initialized
+let cookiesInitialized = false;
+let globalCookies = null;
+
+/**
+ * Initialize cookies by calling the MovieBox app info endpoint
+ * This must be called before making API requests to get the account cookie
+ * @returns {Promise<string|null>} Cookie string or null if failed
+ */
+async function ensureCookiesAreAssigned() {
+  // If already initialized, return existing cookies
+  if (cookiesInitialized && globalCookies) {
+    return globalCookies;
+  }
+
+  try {
+    console.log('Initializing cookies from MovieBox app info endpoint...');
+    const headers = getDefaultHeaders();
+    const url = `${HOST_URL}wefeed-h5-bff/app/get-latest-app-pkgs?app_name=moviebox`;
+    
+    const response = await axios({
+      method: 'GET',
+      url: url,
+      headers: headers,
+      timeout: 30000,
+    });
+
+    // Extract cookies from Set-Cookie headers
+    if (response.headers['set-cookie']) {
+      const cookies = response.headers['set-cookie']
+        .map(cookie => {
+          // Extract cookie name and value (before first semicolon)
+          const cookiePart = cookie.split(';')[0].trim();
+          return cookiePart;
+        })
+        .join('; ');
+      
+      globalCookies = cookies;
+      cookiesInitialized = true;
+      console.log('Cookies initialized successfully:', cookies.substring(0, 50) + '...');
+      return cookies;
+    } else {
+      console.warn('No cookies received from app info endpoint');
+      cookiesInitialized = true; // Mark as initialized even if no cookies to avoid retrying
+      return null;
+    }
+  } catch (error) {
+    console.error('Failed to initialize cookies:', error.message);
+    cookiesInitialized = true; // Mark as initialized to avoid infinite retries
+    return null;
+  }
+}
+
 /**
  * Make a request to the Moviebox API with retry logic
  * @param {string} endpoint - API endpoint (relative path)
@@ -25,10 +78,21 @@ async function makeRequest(endpoint, options = {}) {
     params = null,
     headers = {},
     retries = 2,
+    skipCookieInit = false, // Allow skipping cookie init for the init request itself
   } = options;
+
+  // Ensure cookies are initialized before making requests (unless this is the init request)
+  if (!skipCookieInit && !cookiesInitialized) {
+    await ensureCookiesAreAssigned();
+  }
 
   const defaultHeaders = getDefaultHeaders();
   const requestHeaders = { ...defaultHeaders, ...headers };
+  
+  // Add cookies to request headers if available
+  if (globalCookies) {
+    requestHeaders['Cookie'] = globalCookies;
+  }
 
   // Try primary host first, then fallback to mirrors
   const hosts = [HOST_URL, ...MIRROR_HOSTS.map(host => `https://${host}/`)];
@@ -61,6 +125,7 @@ async function makeRequest(endpoint, options = {}) {
         
         // Extract cookies from Set-Cookie headers if present
         // Store them in response for later use in download requests
+        // Also update global cookies if new ones are received
         if (response.headers['set-cookie']) {
           // Convert Set-Cookie array to cookie string format
           const cookies = response.headers['set-cookie']
@@ -71,8 +136,17 @@ async function makeRequest(endpoint, options = {}) {
             })
             .join('; ');
           
+          // Update global cookies if we got new ones
+          if (cookies) {
+            globalCookies = cookies;
+            cookiesInitialized = true;
+          }
+          
           // Attach cookies to response object for easy access
           response.cookies = cookies;
+        } else if (globalCookies) {
+          // If no new cookies but we have global cookies, use those
+          response.cookies = globalCookies;
         }
         
         return response;
@@ -98,5 +172,6 @@ async function makeRequest(endpoint, options = {}) {
 
 module.exports = {
   makeRequest,
+  ensureCookiesAreAssigned,
 };
 
