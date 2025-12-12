@@ -16,11 +16,13 @@ function getDefaultHeaders(referer = null) {
   const host = SELECTED_HOST.replace(/^https?:\/\//, '');
   
   return {
-    "accept": "application/json",
-    "accept-language": "en-US, en;q=0.5",
-    "user-agent": "mozilla/5.0aoneroom.com/",
+    "accept": "application/json, text/plain, */*",
+    "accept-language": "en-US,en;q=0.9",
+    "accept-encoding": "gzip, deflate, br",
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "referer": referer || HOST_URL,
     "Host": host,
+    "Connection": "keep-alive",
     "X-client-info": '{"timezone":"Africa/Nairobi"}',
   };
 }
@@ -35,11 +37,18 @@ function getDownloadHeaders(detailPath = null) {
   const referer = detailPath ? `${HOST_URL}movies/${detailPath}` : HOST_URL;
   
   return {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "accept-language": "en-US, en;q=0.5",
-    "user-agent": "mozilla/5.0aoneroom.com/",
-    "referer": referer,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Referer": referer,
     "Host": host,
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-User": "?1",
     "X-client-info": '{"timezone":"Africa/Nairobi"}',
   };
 }
