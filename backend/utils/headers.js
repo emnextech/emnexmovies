@@ -26,29 +26,19 @@ function getDefaultHeaders(referer = null) {
 }
 
 /**
- * Get headers for download metadata requests (HTML response)
- * Used for /wefeed-h5-bff/web/subject/download endpoint to get download URLs
- * 
- * CRITICAL: Referer must match the exact movie detail page URL format
- * Format: ${HOST_URL}movies/${detailPath}
- * Example: https://h5.aoneroom.com/movies/avatar-WLDIi21IUBa
- * 
- * Without the correct Referer, the API may return empty download data or invalid URLs.
- * 
- * @param {string} detailPath - Detail path for the movie/TV series (e.g., "avatar-WLDIi21IUBa")
- * @returns {Object} Headers object with correct Referer header
+ * Get headers for download requests (HTML response)
+ * @param {string} detailPath - Detail path for the movie/TV series
+ * @returns {Object} Headers object
  */
 function getDownloadHeaders(detailPath = null) {
   const host = SELECTED_HOST.replace(/^https?:\/\//, '');
-  // Referer must be the exact movie detail page URL: ${HOST_URL}movies/${detailPath}
-  // This is required by the API to return valid download metadata
   const referer = detailPath ? `${HOST_URL}movies/${detailPath}` : HOST_URL;
   
   return {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "en-US, en;q=0.5",
     "user-agent": "mozilla/5.0aoneroom.com/",
-    "referer": referer, // CRITICAL: Must match movie detail page URL
+    "referer": referer,
     "Host": host,
     "X-client-info": '{"timezone":"Africa/Nairobi"}',
   };
@@ -58,32 +48,24 @@ function getDownloadHeaders(detailPath = null) {
  * Get headers for media file downloads (video/subtitle files)
  * MovieBox requires strict headers for actual file downloads (not metadata)
  * 
- * CRITICAL HEADER REQUIREMENTS:
- * - Accept: wildcard value (different from metadata requests)
+ * Required headers include:
+ * - Accept header with wildcard value
  * - User-Agent: Firefox Linux user agent string
- * - Origin: MovieBox host URL (e.g., https://h5.aoneroom.com)
- * - Referer: MUST be exactly https://fmoviesunblocked.net/ - MovieBox blocks other referers
- * - Range: Byte range for resumable downloads (e.g., bytes=0-)
+ * - Origin: MovieBox host URL
+ * - Referer: Must be exactly fmoviesunblocked.net
+ * - Range: Byte range for resumable downloads
  * - accept-language: Language preferences
- * - Cookie: account and i18n_lang cookies from metadata page (REQUIRED for downloads)
+ * - Cookie: account and i18n_lang cookies from metadata page
  * 
- * NOTE: The Referer for media downloads is DIFFERENT from metadata requests:
- * - Metadata requests use: HOST_URL + movies/ + detailPath
- * - Media downloads use: https://fmoviesunblocked.net/
- * 
- * Without the correct Referer, the CDN will reject the download request.
- * 
- * @param {string} downloadUrl - Optional download URL (not currently used, reserved for future use)
- * @param {string} cookies - Optional cookies string from metadata request (REQUIRED for successful downloads)
- * @param {string} range - Optional Range header value for resumable downloads (default: "bytes=0-")
- * @returns {Object} Headers object with correct Referer and other required headers
+ * @param {string} downloadUrl - Optional download URL
+ * @param {string} cookies - Optional cookies string from metadata request
+ * @param {string} range - Optional Range header value
+ * @returns {Object} Headers object
  */
 function getMediaDownloadHeaders(downloadUrl = null, cookies = null, range = "bytes=0-") {
   // Origin should be the full selected host URL (e.g., https://h5.aoneroom.com)
   const origin = SELECTED_HOST.replace(/\/$/, ''); // Remove trailing slash if present
-  // CRITICAL: Referer MUST be exactly "https://fmoviesunblocked.net/" for media file downloads
-  // This is different from metadata requests which use the movie detail page URL
-  // MovieBox CDN will reject requests with incorrect Referer
+  // Referer MUST be exactly https://fmoviesunblocked.net/ - MovieBox blocks other referers
   const referer = DOWNLOAD_REQUEST_REFERER;
   
   const headers = {

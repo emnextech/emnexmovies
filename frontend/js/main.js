@@ -1062,6 +1062,15 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
   downloadBtn.disabled = true;
   downloadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading...';
 
+  // Get config for building full backend URLs (not relative URLs)
+  // CRITICAL: This ensures downloads go to Railway backend, not Vercel
+  const config = (typeof window !== 'undefined' && window.appConfig) ? window.appConfig : {
+    buildApiUrl: (endpoint) => {
+      const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      return path;
+    }
+  };
+
   try {
     // Get download metadata
     const metadata = await api.getDownloadMetadata(subjectId, detailPath, season, episode);
@@ -1158,7 +1167,8 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     }
 
     // Use proxy endpoint for download with proper headers
-    const proxyUrl = `/api/download-proxy?${params.toString()}`;
+    // CRITICAL: Use full backend URL (not relative) so downloads go to Railway, not Vercel
+    const proxyUrl = config.buildApiUrl(`/api/download-proxy?${params.toString()}`);
     
     // CRITICAL: Download immediately after getting signed URL to prevent expiration
     // Signed URLs (with sign= and t= parameters) expire quickly, so we must use them immediately
@@ -1189,7 +1199,8 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
           if (cookies) {
             subtitleParams.append('cookies', cookies);
           }
-          const subtitleUrl = `/api/download-subtitle?${subtitleParams.toString()}`;
+          // CRITICAL: Use full backend URL (not relative) so downloads go to Railway, not Vercel
+          const subtitleUrl = config.buildApiUrl(`/api/download-subtitle?${subtitleParams.toString()}`);
           
           const subtitleLink = document.createElement('a');
           subtitleLink.href = subtitleUrl;
