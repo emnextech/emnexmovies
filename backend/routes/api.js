@@ -446,12 +446,11 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
           downloads: [],
           captions: [],
           limited: false,
-        },
-        _cookies: cookies, // Add cookies to response (frontend will use this)
           limitedCode: '',
           freeNum: 0,
           hasResource: false,
         },
+        _cookies: cookies, // Add cookies to response (frontend will use this)
       });
     }
   } catch (error) {
