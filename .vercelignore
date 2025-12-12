@@ -1,0 +1,16 @@
+# Ignore backend directory - backend is deployed separately
+backend/
+
+# Ignore root package.json to prevent Vercel from trying to run backend scripts
+package.json
+
+# Ignore other backend-related files
+railway.json
+render.yaml
+Dockerfile
+env.example
+
+# Ignore documentation files
+*.md
+!README.md
+
