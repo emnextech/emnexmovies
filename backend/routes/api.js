@@ -757,7 +757,8 @@ router.get('/download-proxy', async (req, res) => {
       url: url.substring(0, 150) + (url.length > 150 ? '...' : ''),
       urlLength: url.length,
       hasCookies: !!cookies,
-      cookiesPreview: cookies ? cookies.substring(0, 50) + '...' : 'NO COOKIES (may fail!)',
+      cookiesPreview: cookies ? cookies.substring(0, 100) + '...' : 'NO COOKIES (may fail!)',
+      cookiesFull: cookies, // Log full cookies for debugging
       range: range,
       headers: {
         referer: headers.Referer,
@@ -765,6 +766,7 @@ router.get('/download-proxy', async (req, res) => {
         userAgent: headers['User-Agent'],
         accept: headers.Accept,
         hasRange: !!headers.Range,
+        hasCookieHeader: !!headers.Cookie,
       },
     });
 
