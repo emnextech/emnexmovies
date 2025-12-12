@@ -65,26 +65,27 @@ Make sure your `backend/package.json` has:
 - ✅ A `start` script: `"start": "node server.js"`
 - ✅ All dependencies listed (express, axios, cors, dotenv, cheerio)
 
-### Step 3: Create railway.json (Optional but Recommended)
+### Step 3: Create railway.json (Optional)
 
-Railway can auto-detect Node.js projects, but a `railway.json` file helps with configuration:
+Railway can auto-detect Node.js projects. The `railway.json` file is optional and minimal:
 
 ```json
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "cd backend && npm install"
+    "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "cd backend && npm start",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
 }
 ```
 
-**Note:** Railway will auto-detect your Node.js app, so this file is optional. Railway is smart enough to find your `backend/` folder and run `npm start`.
+**⚠️ Important Notes:**
+- **DO NOT include `cd backend` in commands** - Railway will use the Root Directory setting from the dashboard
+- The most important configuration is setting **Root Directory to `backend`** in Railway dashboard Settings
+- This file is optional - Railway will work fine without it if you configure Root Directory in the dashboard
 
 ---
 
@@ -102,23 +103,27 @@ Railway can auto-detect Node.js projects, but a `railway.json` file helps with c
 
 #### Step 2: Configure Service
 
-Railway will auto-detect your project. You need to configure it:
+**⚠️ CRITICAL:** Railway will auto-detect your project, but you MUST configure the Root Directory:
 
 1. **Click on your service** (it will be named after your repo)
 2. Go to **Settings** tab
-3. Configure the following:
+3. **Scroll down to "Root Directory"** section
+4. **Set Root Directory to:** `backend`
+   - This is the MOST IMPORTANT setting!
+   - This tells Railway to treat the `backend/` folder as the root of your app
+   - Without this, Railway will try to build from the project root and fail
 
-   **Root Directory:**
-   - Set to: `backend`
-   - This tells Railway where your Node.js app is
+5. Configure the following commands (should auto-detect after setting root directory):
 
    **Start Command:**
    - Should auto-detect: `npm start`
    - If not, set it to: `npm start`
+   - **DO NOT include `cd backend`** - Railway is already in the backend folder
 
    **Build Command:**
    - Should auto-detect: `npm install`
    - If not, set it to: `npm install`
+   - **DO NOT include `cd backend`** - Railway is already in the backend folder
 
 #### Step 3: Set Environment Variables
 
@@ -285,7 +290,27 @@ const API_BASE_URL = 'https://your-railway-url.up.railway.app';
 
 ## Troubleshooting
 
-### Issue 1: Build Fails
+### Issue 1: Build Fails - "can't cd to backend"
+
+**Error:** `sh: 1: cd: can't cd to backend` or `ERROR: failed to build`
+
+**Solutions:**
+1. **Set Root Directory in Railway Dashboard:**
+   - Go to your service → **Settings** tab
+   - Scroll to **"Root Directory"** section
+   - Set it to: `backend` (without quotes)
+   - This is the most common cause of this error!
+
+2. **Remove `cd backend` from commands:**
+   - In **Settings** → **Start Command**, it should be: `npm start` (NOT `cd backend && npm start`)
+   - In **Settings** → **Build Command**, it should be: `npm install` (NOT `cd backend && npm install`)
+   - When Root Directory is set to `backend`, Railway is already in that folder
+
+3. **Delete or simplify railway.json:**
+   - If you have `railway.json` with `cd backend` commands, either delete it or simplify it
+   - Railway will use dashboard settings if Root Directory is configured
+
+### Issue 2: Build Fails - Other Errors
 
 **Error:** `npm install` fails or build times out
 
@@ -294,7 +319,7 @@ const API_BASE_URL = 'https://your-railway-url.up.railway.app';
 - Ensure Node.js version is compatible (Railway uses Node 18+ by default)
 - Check build logs in Railway dashboard → **Deployments** tab
 
-### Issue 2: Service Crashes on Start
+### Issue 3: Service Crashes on Start
 
 **Error:** Service starts then immediately crashes
 
@@ -305,7 +330,7 @@ const API_BASE_URL = 'https://your-railway-url.up.railway.app';
    - Port configuration (Railway sets PORT automatically, don't hardcode it)
    - Missing dependencies
 
-### Issue 3: 403 "Invalid Region" Error
+### Issue 4: 403 "Invalid Region" Error
 
 **Error:** Still getting 403 errors from Moviebox API
 
@@ -321,7 +346,7 @@ const API_BASE_URL = 'https://your-railway-url.up.railway.app';
      - `https://moviebox.pk`
      - `https://moviebox.ph`
 
-### Issue 4: CORS Errors
+### Issue 5: CORS Errors
 
 **Error:** `Access-Control-Allow-Origin` errors in browser
 
@@ -331,7 +356,7 @@ const API_BASE_URL = 'https://your-railway-url.up.railway.app';
 3. Check that Railway service is running (green status)
 4. Restart the service: **Settings** → **Restart**
 
-### Issue 5: Timeout Errors
+### Issue 6: Timeout Errors
 
 **Error:** Requests timing out
 
@@ -340,7 +365,7 @@ const API_BASE_URL = 'https://your-railway-url.up.railway.app';
 - Check Railway dashboard for service status
 - Verify your backend is responding: Visit `https://your-railway-url.up.railway.app/health`
 
-### Issue 6: Can't Find Backend Files
+### Issue 7: Can't Find Backend Files
 
 **Error:** Railway can't find `server.js` or `package.json`
 
