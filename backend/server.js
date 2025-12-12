@@ -70,9 +70,10 @@ app.use('/', apiRoutes);
 app.use('/api', apiRoutes); // Backward compatibility
 app.use('/api', downloadRoutes);
 
-// Health check endpoint
+// Health check endpoint - make it fast and simple
 app.get('/health', (req, res) => {
-  res.json({ 
+  // Don't do any heavy operations here
+  res.status(200).json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     service: 'movie-website-backend',
@@ -99,12 +100,38 @@ app.use((req, res) => {
 });
 
 // Start server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
+  
+  // Initialize cookies in background (don't block server start)
+  setTimeout(async () => {
+    try {
+      const { ensureCookiesAreAssigned } = require('./utils/proxy');
+      await ensureCookiesAreAssigned();
+    } catch (error) {
+      console.warn('Cookie initialization failed (non-critical):', error.message);
+    }
+  }, 1000);
+});
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
-    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
   });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
 
 
 // Export for serverless functions (Render, Vercel, etc.)
