@@ -390,6 +390,7 @@ async function fetchMovieDetailsFromHTML(detailPath, subjectId, options = {}) {
   const axios = require('axios');
   const { HOST_URL } = require('../config/constants');
   const { getDefaultHeaders } = require('./headers');
+  const { ensureCookiesAreAssigned } = require('./proxy');
 
   const {
     fetchFn = null,
@@ -403,6 +404,12 @@ async function fetchMovieDetailsFromHTML(detailPath, subjectId, options = {}) {
     
     // Get headers
     const requestHeaders = headers || getDefaultHeaders();
+    
+    // Get cookies and add to headers
+    const cookies = await ensureCookiesAreAssigned();
+    if (cookies) {
+      requestHeaders['Cookie'] = cookies;
+    }
 
     // Fetch HTML
     let html;
