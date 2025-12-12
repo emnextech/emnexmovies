@@ -250,21 +250,26 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
       resolution: download.resolution,
       size: size, // File size in bytes (as string from API, e.g., "623914683")
       hasResource: hasResourceFlag, // Include hasResource flag for filtering
+      hasDirectUrl: !!download.url // Keep track of original direct URL for filtering
     };
   });
   
   // Filter downloads to only include entries with valid URLs
-  // Check: hasResource flag is not false AND URL exists
+  // This logic should match the backend's lenient filtering
   const downloads = allDownloads.filter(download => {
     const hasValidUrl = !!download.url;
-    const hasResource = download.hasResource !== false;
-    const isValid = hasResource && hasValidUrl;
+    const hasResource = download.hasResource; // This is hasResourceFlag
+    const hasDirectUrl = download.hasDirectUrl;
+
+    // Use lenient filtering: allow if URL exists and (hasResource is true OR a direct URL exists)
+    const isValid = hasValidUrl && (hasResource || hasDirectUrl);
     
     if (!isValid) {
       console.log(`Filtered out download ${download.id} (resolution: ${download.resolution}):`, {
         hasResource: hasResource,
         hasValidUrl: hasValidUrl,
-        reason: !hasResource ? 'hasResource is false' : (!hasValidUrl ? 'no valid URL' : 'unknown'),
+        hasDirectUrl: hasDirectUrl,
+        reason: !hasValidUrl ? 'no valid URL' : 'hasResource is false and no direct URL',
       });
     }
     
@@ -282,8 +287,8 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
     delay: caption.delay || 0,
   }));
   
-  // Remove hasResource from final download objects (not needed by consumers)
-  const finalDownloads = downloads.map(({ hasResource, ...download }) => download);
+  // Remove hasResource and hasDirectUrl from final download objects (not needed by consumers)
+  const finalDownloads = downloads.map(({ hasResource, hasDirectUrl, ...download }) => download);
   
   console.log('Processed downloads:', finalDownloads.map(d => ({ 
     resolution: d.resolution, 
