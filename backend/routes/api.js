@@ -381,14 +381,46 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     // MovieBox sets cookies like: account=...; i18n_lang=en
     const cookies = response.cookies || null;
     
-    // Log response for debugging
+    // Get downloads array for detailed logging
+    const downloads = responseData.data?.downloads || responseData.downloads || [];
+    
+    // Log response structure with detailed information about resources
+    console.log('=== DOWNLOAD METADATA RESPONSE ===');
     console.log('Download metadata response:', {
       hasData: !!responseData.data,
-      downloadsCount: responseData.data?.downloads?.length || responseData.downloads?.length || 0,
+      downloadsCount: downloads.length,
       captionsCount: responseData.data?.captions?.length || responseData.captions?.length || 0,
       hasCookies: !!cookies,
       cookiesPreview: cookies ? cookies.substring(0, 50) + '...' : 'none',
     });
+    
+    // Log detailed information about each download including resource URLs
+    if (downloads.length > 0) {
+      console.log('Download items structure:');
+      downloads.forEach((download, index) => {
+        const hasResource = !!download.resource;
+        const hasResourceUrl = !!download.resource?.url;
+        const hasDirectUrl = !!download.url;
+        const resourceUrl = download.resource?.url || null;
+        const directUrl = download.url || null;
+        
+        console.log(`  Download ${index + 1}:`, {
+          id: download.id,
+          resolution: download.resolution,
+          hasDirectUrl: hasDirectUrl,
+          directUrlPreview: directUrl ? directUrl.substring(0, 80) + '...' : 'none',
+          hasResource: hasResource,
+          hasResourceUrl: hasResourceUrl,
+          resourceUrlPreview: resourceUrl ? resourceUrl.substring(0, 80) + '...' : 'none',
+          resourceKeys: hasResource ? Object.keys(download.resource) : [],
+        });
+        
+        // CRITICAL: Log which URL should be used (resource.url takes priority)
+        const urlToUse = resourceUrl || directUrl;
+        console.log(`  → URL TO USE FOR DOWNLOAD ${index + 1}: ${urlToUse ? urlToUse.substring(0, 100) + '...' : 'MISSING!'}`);
+      });
+    }
+    console.log('=== END METADATA RESPONSE ===');
     
     // Include cookies in response so frontend can pass them to download endpoint
     if (responseData.data) {
@@ -673,22 +705,56 @@ router.get('/download-proxy', async (req, res) => {
     // These are DIFFERENT from metadata headers - MovieBox requires strict headers for downloads
     const headers = getMediaDownloadHeaders(url, cookies, range);
 
-    console.log('Downloading media file with headers:', {
-      url: url.substring(0, 100) + '...',
+    // CRITICAL: This is the ACTUAL MEDIA FILE download request (not metadata!)
+    console.log('=== MEDIA FILE DOWNLOAD REQUEST ===');
+    console.log('Media download request started:', {
+      url: url.substring(0, 150) + (url.length > 150 ? '...' : ''),
+      urlLength: url.length,
       hasCookies: !!cookies,
+      cookiesPreview: cookies ? cookies.substring(0, 50) + '...' : 'NO COOKIES (may fail!)',
       range: range,
-      referer: headers.Referer,
-      origin: headers.Origin,
-      userAgent: headers['User-Agent'],
+      headers: {
+        referer: headers.Referer,
+        origin: headers.Origin,
+        userAgent: headers['User-Agent'],
+        accept: headers.Accept,
+        hasRange: !!headers.Range,
+      },
     });
 
     // Fetch the file with proper headers
-    const response = await axios.get(url, {
-      headers,
-      responseType: 'stream',
-      timeout: 300000, // 5 minutes for large files
-      maxRedirects: 5,
-    });
+    let response;
+    try {
+      response = await axios.get(url, {
+        headers,
+        responseType: 'stream',
+        timeout: 300000, // 5 minutes for large files
+        maxRedirects: 5,
+      });
+      
+      // Log successful response
+      console.log('Media download response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers['content-type'],
+        contentLength: response.headers['content-length'],
+        hasStream: !!response.data,
+      });
+      console.log('=== END MEDIA FILE DOWNLOAD ===');
+    } catch (downloadError) {
+      // Log detailed error for media download
+      console.error('=== MEDIA FILE DOWNLOAD FAILED ===');
+      console.error('Media download error:', {
+        message: downloadError.message,
+        status: downloadError.response?.status,
+        statusText: downloadError.response?.statusText,
+        url: url.substring(0, 150) + '...',
+        hasCookies: !!cookies,
+        errorCode: downloadError.code,
+      });
+      console.error('=== END MEDIA FILE DOWNLOAD ERROR ===');
+      throw downloadError; // Re-throw to be handled by outer catch
+    }
 
     // Set appropriate headers for download
     const contentType = response.headers['content-type'] || 'video/mp4';
@@ -756,13 +822,38 @@ router.get('/download-proxy', async (req, res) => {
 
     // Pipe the response
     response.data.pipe(res);
-  } catch (error) {
-    console.error('Error proxying download:', error.message);
-    console.error('Download URL:', req.query.url);
-    res.status(error.response?.status || 500).json({
-      error: 'Failed to proxy download',
-      message: error.message,
+    
+    // Log when streaming starts
+    console.log('Media file streaming started to client');
+    
+    // Handle stream errors
+    response.data.on('error', (streamError) => {
+      console.error('Media stream error:', streamError.message);
     });
+    
+    // Log when stream ends
+    response.data.on('end', () => {
+      console.log('Media file stream completed');
+    });
+  } catch (error) {
+    // This catch block handles errors from axios request or other errors
+    console.error('=== DOWNLOAD PROXY ERROR ===');
+    console.error('Error proxying download:', error.message);
+    console.error('Download URL:', req.query.url ? req.query.url.substring(0, 150) + '...' : 'MISSING');
+    console.error('Error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      hasCookies: !!req.query.cookies,
+      errorCode: error.code,
+    });
+    console.error('=== END DOWNLOAD PROXY ERROR ===');
+    
+    if (!res.headersSent) {
+      res.status(error.response?.status || 500).json({
+        error: 'Failed to proxy download',
+        message: error.message,
+      });
+    }
   }
 });
 

@@ -210,21 +210,40 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
   const responseData = response.data || response;
   const data = responseData.data || responseData;
   
+  // Extract cookies from response (required for media file downloads)
+  const cookies = responseData._cookies || response._cookies || null;
+  
   // Debug logging
   console.log('Download metadata response structure:', {
     hasResponseData: !!responseData,
     hasData: !!data,
     downloadsCount: data?.downloads?.length || 0,
+    hasCookies: !!cookies,
     firstDownload: data?.downloads?.[0] || null,
   });
   
   // Ensure downloads and captions arrays exist with size information
+  // CRITICAL: Extract resource.url from each download (this is the actual media URL)
+  // Fallback to download.url if resource.url doesn't exist
   const downloads = (data.downloads || []).map(download => {
     // Ensure size is preserved as string (API returns it as string)
     const size = download.size || download.fileSize || null;
+    
+    // Extract URL: resource.url takes priority (this is the real signed media URL)
+    // If resource.url doesn't exist, fallback to download.url
+    const mediaUrl = download.resource?.url || download.url || null;
+    const urlSource = download.resource?.url ? 'resource.url' : (download.url ? 'download.url' : 'none');
+    
+    console.log(`Processing download ${download.id}:`, {
+      resolution: download.resolution,
+      urlSource: urlSource,
+      urlPreview: mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'MISSING URL!',
+      hasResource: !!download.resource,
+    });
+    
     return {
       id: download.id,
-      url: download.url,
+      url: mediaUrl, // Use resource.url if available, otherwise download.url
       resolution: download.resolution,
       size: size, // File size in bytes (as string from API, e.g., "623914683")
     };
@@ -242,7 +261,9 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
   console.log('Processed downloads:', downloads.map(d => ({ 
     resolution: d.resolution, 
     hasSize: !!d.size, 
-    size: d.size 
+    size: d.size,
+    hasUrl: !!d.url,
+    urlPreview: d.url ? d.url.substring(0, 60) + '...' : 'NO URL'
   })));
   
   return {
@@ -252,6 +273,7 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
     limitedCode: data.limitedCode || '',
     freeNum: data.freeNum || 0,
     hasResource: data.hasResource || false,
+    cookies: cookies, // Return cookies so frontend can pass them to download endpoint
   };
 }
 

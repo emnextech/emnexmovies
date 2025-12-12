@@ -1068,6 +1068,8 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     
     const downloads = metadata.downloads || [];
     const captions = metadata.captions || [];
+    // Extract cookies from metadata response (CRITICAL: required for media file downloads)
+    const cookies = metadata.cookies || null;
 
     if (downloads.length === 0) {
       throw new Error('No video files available');
@@ -1091,6 +1093,13 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       throw new Error('No video file available for selected quality');
     }
 
+    // Log the selected file URL (which should be resource.url if available)
+    console.log('Selected file for download:', {
+      resolution: selectedFile.resolution,
+      urlPreview: selectedFile.url ? selectedFile.url.substring(0, 100) + '...' : 'MISSING URL',
+      hasCookies: !!cookies,
+    });
+
     // Format file size for display
     const fileSize = selectedFile.size ? ui.formatFileSize(parseInt(selectedFile.size)) : '';
     const sizeInfo = fileSize ? ` (${fileSize})` : '';
@@ -1104,6 +1113,11 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       url: selectedFile.url,
       detailPath: detailPath
     });
+    
+    // CRITICAL: Add cookies to query params (required for MovieBox media downloads)
+    if (cookies) {
+      params.append('cookies', cookies);
+    }
     
     // Add subjectId if available
     if (subjectId) {
@@ -1152,9 +1166,18 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       if (subtitleFile && subtitleFile.url) {
         // Small delay to avoid browser blocking multiple downloads
         setTimeout(() => {
+          // Build subtitle download URL with cookies if available
+          const subtitleParams = new URLSearchParams({
+            url: subtitleFile.url,
+          });
+          if (cookies) {
+            subtitleParams.append('cookies', cookies);
+          }
+          const subtitleUrl = `/api/download-subtitle?${subtitleParams.toString()}`;
+          
           const subtitleLink = document.createElement('a');
-          subtitleLink.href = subtitleFile.url;
-          subtitleLink.download = ''; // Let browser determine filename
+          subtitleLink.href = subtitleUrl;
+          subtitleLink.download = ''; // Let backend determine filename
           subtitleLink.target = '_blank';
           document.body.appendChild(subtitleLink);
           subtitleLink.click();
