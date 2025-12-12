@@ -1,0 +1,12 @@
+{
+  "name": "movie-website-frontend",
+  "version": "1.0.0",
+  "description": "Frontend static site for movie download website",
+  "scripts": {
+    "build": "echo 'Static site ready - no build needed'"
+  },
+  "keywords": ["movie", "frontend", "static"],
+  "author": "",
+  "license": "MIT"
+}
+

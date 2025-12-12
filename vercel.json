@@ -1,7 +1,8 @@
 {
   "version": 2,
-  "buildCommand": "echo 'Static site - no build needed'",
+  "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend",
+  "installCommand": "cd frontend && npm install",
   "headers": [
     {
       "source": "/(.*)",
