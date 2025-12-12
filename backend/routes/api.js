@@ -403,6 +403,7 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
         const hasDirectUrl = !!download.url;
         const resourceUrl = download.resource?.url || null;
         const directUrl = download.url || null;
+        const resourceHasResource = download.resource?.hasResource; // Log the actual value
         
         console.log(`  Download ${index + 1}:`, {
           id: download.id,
@@ -410,6 +411,7 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
           hasDirectUrl: hasDirectUrl,
           directUrlPreview: directUrl ? directUrl.substring(0, 80) + '...' : 'none',
           hasResource: hasResource,
+          resourceHasResource: resourceHasResource, // Shows actual hasResource value from API
           hasResourceUrl: hasResourceUrl,
           resourceUrlPreview: resourceUrl ? resourceUrl.substring(0, 80) + '...' : 'none',
           resourceKeys: hasResource ? Object.keys(download.resource) : [],
@@ -422,22 +424,26 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     }
     
     // Filter downloads to only include entries with hasResource: true and valid URLs
-    // Check: hasResource flag is not false AND (resource.url exists OR download.url exists)
+    // MODIFIED: Allow downloads if they have a valid URL, even if hasResource is false
+    // This handles cases where MovieBox blocks resource.hasResource but still provides download.url
+    // Only filter out if BOTH hasResource is false AND no valid URL exists
     const downloads = allDownloads.filter((download) => {
       const hasResourceFlag = download.resource?.hasResource !== false;
       const hasResourceUrl = !!download.resource?.url;
       const hasDirectUrl = !!download.url;
       const hasValidUrl = hasResourceUrl || hasDirectUrl;
       
-      // Include if hasResource is not false AND has a valid URL
-      const isValid = hasResourceFlag && hasValidUrl;
+      // MODIFIED: Allow downloads if they have a valid URL, even if hasResource is false
+      // This handles cases where MovieBox blocks resource.hasResource but still provides download.url
+      // Only filter out if BOTH hasResource is false AND no valid URL exists
+      const isValid = hasValidUrl && (hasResourceFlag || hasDirectUrl);
       
       if (!isValid) {
         console.log(`  ✗ Filtered out download ${download.id} (resolution: ${download.resolution}):`, {
           hasResourceFlag: hasResourceFlag,
           hasResourceUrl: hasResourceUrl,
           hasDirectUrl: hasDirectUrl,
-          reason: !hasResourceFlag ? 'hasResource is false' : (!hasValidUrl ? 'no valid URL' : 'unknown'),
+          reason: !hasValidUrl ? 'no valid URL' : (!hasResourceFlag && !hasDirectUrl ? 'hasResource is false and no direct URL' : 'unknown'),
         });
       }
       
