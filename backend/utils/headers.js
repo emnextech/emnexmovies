@@ -27,24 +27,44 @@ function getDefaultHeaders(referer = null) {
 
 /**
  * Get headers for download requests (HTML response)
- * @param {string} detailPath - Detail path for the movie/TV series
+ * These headers MUST exactly match what a real browser sends, otherwise the API blocks the request.
+ * 
+ * Required headers:
+ * - Accept: text/html,application/xhtml+xml,application/xml;q=0.9 with wildcard (NOT application/json)
+ * - User-Agent: Real browser user-agent (Firefox on Linux)
+ * - Referer: https://h5.aoneroom.com/movies/[detailPath] (MUST match the movie detail page)
+ * - Origin: https://h5.aoneroom.com (MUST be present)
+ * - Connection: keep-alive (browser-like behavior)
+ * - Host: h5.aoneroom.com
+ * - Cookie: account and i18n_lang cookies (if available)
+ * 
+ * @param {string} detailPath - Detail path for the movie/TV series, e.g. "alex-rider-anDQo2BS6A9"
+ * @param {string} cookies - Optional cookies string
  * @returns {Object} Headers object
  */
 function getDownloadHeaders(detailPath = null, cookies = null) {
   const host = SELECTED_HOST.replace(/^https?:\/\//, '');
-  // Referer must match the movie's detail page URL for download metadata requests
-  const referer = detailPath ? `${HOST_URL}movies/${detailPath.replace(/^\//, '')}` : HOST_URL;
+  const origin = SELECTED_HOST.replace(/\/$/, ''); // Remove trailing slash if present
+  
+  // Referer MUST be exactly: https://h5.aoneroom.com/movies/<detailPath>
+  // This is the MOST critical header - API checks if request comes from the movie detail page
+  const referer = detailPath 
+    ? `${origin}/movies/${detailPath.replace(/^\//, '')}` 
+    : `${origin}/`;
   
   const headers = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "accept-language": "en-US,en;q=0.5",
-    "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
-    "referer": referer,
+    "Accept-Language": "en-US,en;q=0.5",
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
+    "Referer": referer,
+    "Origin": origin,
     "Host": host,
+    "Connection": "keep-alive",
     "X-client-info": '{"timezone":"Africa/Nairobi"}',
   };
   
   // Add cookies if provided (from MB_COOKIES env var or dynamic fetching)
+  // Cookies are required for the API to return download links
   if (cookies) {
     headers["Cookie"] = cookies;
   }

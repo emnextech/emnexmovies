@@ -4,7 +4,7 @@
  */
 
 const axios = require('axios');
-const { HOST_URL, MIRROR_HOSTS } = require('../config/constants');
+const { HOST_URL, MIRROR_HOSTS, SELECTED_HOST } = require('../config/constants');
 const { getDefaultHeaders } = require('./headers');
 
 // Track if cookies have been initialized
@@ -101,12 +101,28 @@ async function makeRequest(endpoint, options = {}) {
     await ensureCookiesAreAssigned();
   }
 
-  const defaultHeaders = getDefaultHeaders();
-  const requestHeaders = { ...defaultHeaders, ...headers };
+  // If custom headers are provided (e.g., for download requests), use them directly
+  // Otherwise, merge with default headers
+  // This prevents default headers (like "accept: application/json") from conflicting
+  // with custom headers (like "Accept: text/html...")
+  let requestHeaders;
+  if (Object.keys(headers).length > 0) {
+    // Custom headers provided - use them directly (they should be complete)
+    // Only add Host if not present (required for HTTP/1.1)
+    requestHeaders = { ...headers };
+    if (!requestHeaders['Host'] && !requestHeaders['host']) {
+      const host = SELECTED_HOST.replace(/^https?:\/\//, '');
+      requestHeaders['Host'] = host;
+    }
+  } else {
+    // No custom headers - use defaults
+    const defaultHeaders = getDefaultHeaders();
+    requestHeaders = { ...defaultHeaders };
+  }
   
   // Add cookies to request headers if available (from MB_COOKIES or dynamic fetching)
   // Only add if not already present in custom headers
-  if (globalCookies && !requestHeaders['Cookie']) {
+  if (globalCookies && !requestHeaders['Cookie'] && !requestHeaders['cookie']) {
     requestHeaders['Cookie'] = globalCookies;
   }
 
