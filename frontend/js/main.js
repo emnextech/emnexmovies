@@ -1254,8 +1254,6 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
         document.body.removeChild(downloadLink);
         console.log('Download link removed from DOM');
       }, 100);
-      
-      ui.showToast('Download started successfully', 'success');
     } catch (error) {
       console.error('Download error:', error);
       
