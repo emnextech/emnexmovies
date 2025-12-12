@@ -1170,15 +1170,69 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     // CRITICAL: Use full backend URL (not relative) so downloads go to Railway, not Vercel
     const proxyUrl = config.buildApiUrl(`/api/download-proxy?${params.toString()}`);
     
+    // Log download attempt for debugging
+    console.log('=== DOWNLOAD ATTEMPT ===');
+    console.log('Proxy URL:', proxyUrl);
+    console.log('Config API_BASE_URL:', config.API_BASE_URL);
+    console.log('Selected file URL preview:', selectedFile.url ? selectedFile.url.substring(0, 100) + '...' : 'MISSING');
+    console.log('Has cookies:', !!cookies);
+    
     // CRITICAL: Download immediately after getting signed URL to prevent expiration
     // Signed URLs (with sign= and t= parameters) expire quickly, so we must use them immediately
-    // Create download link using proxy and trigger immediately (no delays)
-    const videoLink = document.createElement('a');
-    videoLink.href = proxyUrl;
-    videoLink.download = ''; // Let backend set the filename via Content-Disposition header
-    document.body.appendChild(videoLink);
-    videoLink.click(); // Trigger download immediately - signed URLs expire quickly
-    document.body.removeChild(videoLink);
+    // Use fetch + blob approach for better error handling and CORS support
+    try {
+      console.log('Starting download via fetch...');
+      
+      const downloadResponse = await fetch(proxyUrl, {
+        method: 'GET',
+        credentials: 'include',
+        mode: 'cors',
+      });
+      
+      console.log('Download response status:', downloadResponse.status, downloadResponse.statusText);
+      
+      if (!downloadResponse.ok) {
+        const errorText = await downloadResponse.text().catch(() => 'Unknown error');
+        throw new Error(`Download failed: ${downloadResponse.status} ${downloadResponse.statusText}. ${errorText}`);
+      }
+      
+      // Get filename from Content-Disposition header if available
+      const contentDisposition = downloadResponse.headers.get('Content-Disposition');
+      let filename = null;
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+        if (filenameMatch && filenameMatch[1]) {
+          filename = decodeURIComponent(filenameMatch[1].replace(/['"]/g, ''));
+        }
+      }
+      
+      console.log('Download response received, creating blob...');
+      const blob = await downloadResponse.blob();
+      console.log('Blob created, size:', blob.size, 'bytes');
+      
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const videoLink = document.createElement('a');
+      videoLink.href = blobUrl;
+      videoLink.download = filename || ''; // Use filename from Content-Disposition if available
+      document.body.appendChild(videoLink);
+      
+      console.log('Triggering download...');
+      videoLink.click();
+      document.body.removeChild(videoLink);
+      
+      // Clean up blob URL after a delay
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+        console.log('Blob URL revoked');
+      }, 1000);
+      
+      ui.showToast('Download started successfully', 'success');
+    } catch (error) {
+      console.error('Download fetch error:', error);
+      ui.showToast('Download failed: ' + error.message, 'error');
+      throw error; // Re-throw to be caught by outer catch block
+    }
 
     // Download subtitle if selected
     if (subtitleLang && subtitleLang !== 'None' && captions.length > 0) {

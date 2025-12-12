@@ -922,6 +922,17 @@ router.get('/download-proxy', async (req, res) => {
       throw downloadError; // Re-throw to be handled by outer catch
     }
 
+    // Set CORS headers explicitly for downloads (required for cross-origin fetch)
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      // Allow requests with no origin (like direct downloads)
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type');
+    
     // Set appropriate headers for download
     const contentType = response.headers['content-type'] || 'video/mp4';
     res.setHeader('Content-Type', contentType);
