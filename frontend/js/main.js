@@ -1169,6 +1169,10 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     // CRITICAL: Add cookies to query params (required for MovieBox media downloads)
     if (cookies) {
       params.append('cookies', cookies);
+      console.log('Cookies added to download params:', cookies.substring(0, 100) + '...');
+      console.log('Cookies full length:', cookies.length);
+    } else {
+      console.warn('WARNING: No cookies available for download!');
     }
     
     // Add subjectId if available
@@ -1219,6 +1223,11 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       });
       
       console.log('Download response status:', downloadResponse.status, downloadResponse.statusText);
+      console.log('Download response headers:', {
+        contentType: downloadResponse.headers.get('Content-Type'),
+        contentDisposition: downloadResponse.headers.get('Content-Disposition'),
+        contentLength: downloadResponse.headers.get('Content-Length'),
+      });
       
       if (!downloadResponse.ok) {
         // Check if it's a JSON error response

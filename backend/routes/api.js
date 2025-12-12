@@ -397,7 +397,9 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
       downloadsCount: allDownloads.length,
       captionsCount: responseData.data?.captions?.length || responseData.captions?.length || 0,
       hasCookies: !!cookies,
-      cookiesPreview: cookies ? cookies.substring(0, 50) + '...' : 'none',
+      cookiesPreview: cookies ? cookies.substring(0, 100) + '...' : 'none',
+      cookiesFull: cookies, // Log full cookies for debugging
+      cookiesLength: cookies ? cookies.length : 0,
     });
     
     // Log detailed information about each download including resource URLs
@@ -734,15 +736,35 @@ router.get('/recommendations/:subjectId', async (req, res) => {
  * - Referer: https://fmoviesunblocked.net/
  */
 router.get('/download-proxy', async (req, res) => {
+  // Log ALL requests to download-proxy (even before try block to catch everything)
+  console.log('=== DOWNLOAD PROXY REQUEST RECEIVED ===');
+  console.log('Request received:', {
+    method: req.method,
+    path: req.path,
+    query: Object.keys(req.query),
+    hasUrl: !!req.query.url,
+    hasCookies: !!req.query.cookies,
+    cookiesPreview: req.query.cookies ? req.query.cookies.substring(0, 100) + '...' : 'NO COOKIES IN QUERY',
+  });
+  
   try {
     const { url, detailPath, subjectId, season, episode, title, quality, resolution } = req.query;
 
     if (!url) {
+      console.error('DOWNLOAD PROXY ERROR: Missing url parameter');
       return res.status(400).json({ error: 'url query parameter is required' });
     }
 
     // Get cookies from query params if provided (from metadata request)
-    const cookies = req.query.cookies || null;
+    // Also ensure we have cookies from globalCookies if query doesn't have them
+    let cookies = req.query.cookies || null;
+    
+    // If no cookies in query, try to get from global cookies (MB_COOKIES)
+    if (!cookies) {
+      const { ensureCookiesAreAssigned } = require('../utils/proxy');
+      cookies = await ensureCookiesAreAssigned();
+      console.log('No cookies in query, using global cookies:', cookies ? 'YES' : 'NO');
+    }
     
     // Get Range header from client request, or default to bytes=0-
     const range = req.headers.range || "bytes=0-";

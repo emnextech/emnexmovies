@@ -62,6 +62,20 @@ app.use(express.urlencoded({ extended: true }));
 // Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  
+  // Special logging for download-proxy requests
+  if (req.path.includes('download-proxy')) {
+    console.log('=== DOWNLOAD PROXY REQUEST DETECTED ===');
+    console.log('Request details:', {
+      method: req.method,
+      path: req.path,
+      query: Object.keys(req.query),
+      hasUrl: !!req.query.url,
+      hasCookies: !!req.query.cookies,
+      origin: req.headers.origin,
+    });
+  }
+  
   next();
 });
 
