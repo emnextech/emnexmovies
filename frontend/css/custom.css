@@ -311,36 +311,28 @@ body > .error-page {
 .card {
   background-color: var(--dark-surface);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
-  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  border-radius: 8px;
   overflow: hidden;
 }
 
 .card:hover {
-  transform: translateY(-8px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 /* Ensure no green colors on movie cards */
 .movie-card:hover {
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.5) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
-}
-
-.movie-card:hover .card-body {
-  background: var(--dark-surface-hover) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
 }
 
 .card-img-top {
-  border-radius: 8px 8px 0 0;
+  border-radius: 0;
 }
 
 /* Image Loading Optimization */
 .movie-card-image-wrapper {
   position: relative;
   overflow: hidden;
-  background-color: transparent;
+  background-color: var(--dark-surface);
   height: 200px;
   display: flex;
   align-items: center;
@@ -356,8 +348,7 @@ body > .error-page {
   height: 100%;
   object-fit: cover;
   opacity: 1;
-  transition: opacity 0.4s ease-in-out;
-  background-color: transparent;
+  background-color: var(--dark-surface);
   position: relative;
   z-index: 3;
 }
@@ -406,11 +397,10 @@ body > .error-page {
 
 .movie-card-title {
   color: var(--text-primary) !important;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 0.95rem;
   margin-bottom: 0.4rem;
   line-height: 1.3;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -464,18 +454,16 @@ body > .error-page {
   position: absolute;
   top: 6px;
   left: 6px;
-  background: linear-gradient(135deg, rgba(245, 197, 24, 0.95) 0%, rgba(245, 197, 24, 0.85) 100%);
+  background: rgba(245, 197, 24, 0.9);
   color: #000;
   padding: 3px 6px;
   border-radius: 4px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.7rem;
   display: flex;
   align-items: center;
   gap: 3px;
   z-index: 3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
 }
 
 .imdb-rating-badge i {
@@ -494,18 +482,16 @@ body > .error-page {
   position: absolute;
   top: 6px;
   right: 6px;
-  background: linear-gradient(135deg, rgba(34, 139, 34, 0.95) 0%, rgba(34, 139, 34, 0.85) 100%);
+  background: rgba(34, 139, 34, 0.9);
   color: #fff;
   padding: 3px 6px;
   border-radius: 4px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.7rem;
   display: flex;
   align-items: center;
   gap: 3px;
   z-index: 3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
 }
 
 .english-audio-badge i {
@@ -608,11 +594,6 @@ body > .error-page {
   padding: 0.75rem;
   background: var(--dark-surface);
   min-height: 75px;
-  border-top: 1px solid var(--border-color);
-}
-
-.movie-card:hover .card-body {
-  background: var(--dark-surface-hover);
 }
 
 /* Movie Cards Grid */
@@ -638,14 +619,9 @@ body > .error-page {
 .movie-card .card-img-top {
   height: 200px;
   object-fit: cover;
-  transition: transform 0.3s ease;
   width: 100%;
   position: relative;
   z-index: 3;
-}
-
-.movie-card:hover .card-img-top {
-  transform: scale(1.08);
 }
 
 @media (min-width: 1400px) {
@@ -755,9 +731,8 @@ body > .error-page {
 .shimmer-card {
   background-color: var(--dark-surface);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 8px;
   overflow: hidden;
-  transition: transform 0.3s ease;
 }
 
 .shimmer-image {
