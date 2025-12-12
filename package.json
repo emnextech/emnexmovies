@@ -2,7 +2,8 @@
     "name": "movie-website",
     "version": "1.0.0",
     "scripts": {
-      "start": "cd backend && node server.js"
+      "start": "cd backend && node server.js",
+      "build": "echo 'Static site build - frontend directory ready'"
     },
     "dependencies": {
       "express": "^4.18.2",
