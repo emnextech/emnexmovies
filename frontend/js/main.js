@@ -658,11 +658,7 @@ function renderMovieDetails(movieData) {
                             <i class="bi bi-hd"></i> Quality
                           </label>
                           <select id="quality-selector" class="form-select quality-selector">
-                            <option value="BEST">Best Available</option>
-                            <option value="1080P">1080P</option>
-                            <option value="720P">720P</option>
-                            <option value="480P">480P</option>
-                            <option value="360P">360P</option>
+                            <!-- Options will be dynamically loaded -->
                           </select>
                           <div id="quality-size-info" class="quality-size-info"></div>
                         </div>
@@ -880,91 +876,92 @@ function renderMovieDetails(movieData) {
  * Load and display file sizes for quality options
  */
 async function loadQualitySizes(subjectId, detailPath, qualitySelector, sizeInfoElement, season = 0, episode = 0) {
-  if (!sizeInfoElement) return;
-  
+  if (!qualitySelector) return;
+
   try {
+    // Show loading state in selector
+    qualitySelector.innerHTML = '<option>Loading qualities...</option>';
+    qualitySelector.disabled = true;
+    if (sizeInfoElement) sizeInfoElement.textContent = '';
+
     const metadata = await api.getDownloadMetadata(subjectId, detailPath, season, episode);
     const downloads = metadata.downloads || [];
-    
+
+    // Clear loading state
+    qualitySelector.innerHTML = '';
+    qualitySelector.disabled = false;
+
     if (downloads.length === 0) {
-      sizeInfoElement.textContent = '';
+      qualitySelector.innerHTML = '<option value="">No links found</option>';
       return;
     }
 
-    const selectedQuality = qualitySelector.value;
-    let selectedFile = null;
-    
-    if (selectedQuality === 'BEST') {
-      selectedFile = [...downloads].sort((a, b) => (b.resolution || 0) - (a.resolution || 0))[0];
-    } else if (selectedQuality === 'WORST') {
-      selectedFile = [...downloads].sort((a, b) => (a.resolution || 0) - (b.resolution || 0))[0];
-    } else {
-      const qualityNum = parseInt(selectedQuality.replace('P', '')) || 0;
-      selectedFile = downloads.find(f => f.resolution === qualityNum);
-    }
+    // Sort downloads by resolution descending
+    downloads.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
 
-    if (selectedFile) {
-      // Handle size as string or number
-      let sizeValue = selectedFile.size;
+    // Add "Best Available" option
+    const bestOption = document.createElement('option');
+    bestOption.value = 'BEST';
+    bestOption.textContent = 'Best Available';
+    qualitySelector.appendChild(bestOption);
+
+    // Add options for each available quality
+    downloads.forEach(download => {
+      const option = document.createElement('option');
+      const resolution = download.resolution || 0;
+      const size = download.size ? parseInt(download.size, 10) : 0;
       
-      // Debug: Log the selected file to see its structure
-      console.log('Selected file for quality', selectedQuality, ':', selectedFile);
-      
-      if (sizeValue !== null && sizeValue !== undefined && sizeValue !== '') {
-        // Convert string to number if needed
-        if (typeof sizeValue === 'string') {
-          sizeValue = parseInt(sizeValue, 10);
+      if (resolution > 0) {
+        option.value = `${resolution}P`;
+        let text = `${resolution}P`;
+        if (size > 0) {
+          text += ` (${ui.formatFileSize(size)})`;
         }
-        
-        if (!isNaN(sizeValue) && sizeValue > 0) {
-          const fileSize = ui.formatFileSize(sizeValue);
-          sizeInfoElement.textContent = `File size: ${fileSize}`;
-          sizeInfoElement.style.color = 'var(--text-secondary)';
-          sizeInfoElement.style.display = 'block';
-        } else {
-          console.warn('Invalid size value:', selectedFile.size, 'parsed as:', sizeValue);
-          // Try to find size from other downloads as fallback
-          const fallbackFile = downloads.find(d => d.size && parseInt(d.size) > 0);
-          if (fallbackFile && fallbackFile.size) {
-            const fallbackSize = parseInt(fallbackFile.size, 10);
-            if (!isNaN(fallbackSize) && fallbackSize > 0) {
-              const fileSize = ui.formatFileSize(fallbackSize);
-              sizeInfoElement.textContent = `File size: ${fileSize} (approx)`;
-              sizeInfoElement.style.color = 'var(--text-secondary)';
-              sizeInfoElement.style.display = 'block';
-            } else {
-              sizeInfoElement.textContent = '';
-            }
-          } else {
-            sizeInfoElement.textContent = '';
-          }
-        }
+        option.textContent = text;
+        qualitySelector.appendChild(option);
+      }
+    });
+
+    // Function to update size info based on selection
+    const updateSizeInfo = () => {
+      if (!sizeInfoElement) return;
+
+      const selectedQuality = qualitySelector.value;
+      let selectedFile = null;
+
+      if (selectedQuality === 'BEST') {
+        selectedFile = downloads[0]; // Highest resolution since we sorted
       } else {
-        console.warn('No size field in selectedFile. Available fields:', Object.keys(selectedFile));
-        // Try to find any file with size
-        const fileWithSize = downloads.find(d => d.size && parseInt(d.size) > 0);
-        if (fileWithSize && fileWithSize.size) {
-          const sizeValue = parseInt(fileWithSize.size, 10);
-          if (!isNaN(sizeValue) && sizeValue > 0) {
-            const fileSize = ui.formatFileSize(sizeValue);
-            sizeInfoElement.textContent = `File size: ${fileSize} (approx)`;
-            sizeInfoElement.style.color = 'var(--text-secondary)';
-            sizeInfoElement.style.display = 'block';
-          } else {
-            sizeInfoElement.textContent = '';
-          }
+        const qualityNum = parseInt(selectedQuality.replace('P', '')) || 0;
+        selectedFile = downloads.find(f => f.resolution === qualityNum);
+      }
+
+      if (selectedFile && selectedFile.size) {
+        const size = parseInt(selectedFile.size, 10);
+        if (size > 0) {
+          sizeInfoElement.textContent = `File size: ${ui.formatFileSize(size)}`;
+          sizeInfoElement.style.display = 'block';
         } else {
           sizeInfoElement.textContent = '';
         }
+      } else {
+        sizeInfoElement.textContent = '';
       }
-    } else {
-      console.warn('No file found for quality:', selectedQuality, 'Available downloads:', downloads);
-      sizeInfoElement.textContent = '';
-    }
+    };
+
+    // Update size info initially and on change
+    updateSizeInfo();
+    qualitySelector.removeEventListener('change', updateSizeInfo); // Prevent multiple listeners
+    qualitySelector.addEventListener('change', updateSizeInfo);
+
+
   } catch (error) {
-    console.error('Could not load file sizes:', error);
-    console.error('Error details:', error.message, error.stack);
-    sizeInfoElement.textContent = '';
+    console.error('Could not load file qualities:', error);
+    if (qualitySelector) {
+      qualitySelector.innerHTML = '<option value="">Error loading</option>';
+      qualitySelector.disabled = true;
+    }
+    if (sizeInfoElement) sizeInfoElement.textContent = 'Could not load qualities.';
   }
 }
 
