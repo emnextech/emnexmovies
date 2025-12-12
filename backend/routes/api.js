@@ -382,22 +382,22 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     const cookies = response.cookies || null;
     
     // Get downloads array for detailed logging
-    const downloads = responseData.data?.downloads || responseData.downloads || [];
+    const allDownloads = responseData.data?.downloads || responseData.downloads || [];
     
     // Log response structure with detailed information about resources
     console.log('=== DOWNLOAD METADATA RESPONSE ===');
     console.log('Download metadata response:', {
       hasData: !!responseData.data,
-      downloadsCount: downloads.length,
+      downloadsCount: allDownloads.length,
       captionsCount: responseData.data?.captions?.length || responseData.captions?.length || 0,
       hasCookies: !!cookies,
       cookiesPreview: cookies ? cookies.substring(0, 50) + '...' : 'none',
     });
     
     // Log detailed information about each download including resource URLs
-    if (downloads.length > 0) {
-      console.log('Download items structure:');
-      downloads.forEach((download, index) => {
+    if (allDownloads.length > 0) {
+      console.log('Download items structure (before filtering):');
+      allDownloads.forEach((download, index) => {
         const hasResource = !!download.resource;
         const hasResourceUrl = !!download.resource?.url;
         const hasDirectUrl = !!download.url;
@@ -420,13 +420,48 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
         console.log(`  → URL TO USE FOR DOWNLOAD ${index + 1}: ${urlToUse ? urlToUse.substring(0, 100) + '...' : 'MISSING!'}`);
       });
     }
+    
+    // Filter downloads to only include entries with hasResource: true and valid URLs
+    // Check: hasResource flag is not false AND (resource.url exists OR download.url exists)
+    const downloads = allDownloads.filter((download) => {
+      const hasResourceFlag = download.resource?.hasResource !== false;
+      const hasResourceUrl = !!download.resource?.url;
+      const hasDirectUrl = !!download.url;
+      const hasValidUrl = hasResourceUrl || hasDirectUrl;
+      
+      // Include if hasResource is not false AND has a valid URL
+      const isValid = hasResourceFlag && hasValidUrl;
+      
+      if (!isValid) {
+        console.log(`  ✗ Filtered out download ${download.id} (resolution: ${download.resolution}):`, {
+          hasResourceFlag: hasResourceFlag,
+          hasResourceUrl: hasResourceUrl,
+          hasDirectUrl: hasDirectUrl,
+          reason: !hasResourceFlag ? 'hasResource is false' : (!hasValidUrl ? 'no valid URL' : 'unknown'),
+        });
+      }
+      
+      return isValid;
+    });
+    
+    console.log(`Filtered downloads: ${downloads.length} available out of ${allDownloads.length} total`);
     console.log('=== END METADATA RESPONSE ===');
+    
+    // Update response data with filtered downloads
+    const finalResponseData = { ...responseData };
+    if (finalResponseData.data) {
+      finalResponseData.data.downloads = downloads;
+      // Update hasResource flag based on filtered results
+      finalResponseData.data.hasResource = downloads.length > 0;
+    } else if (finalResponseData.downloads) {
+      finalResponseData.downloads = downloads;
+    }
     
     // Include cookies in response so frontend can pass them to download endpoint
     if (responseData.data) {
       // If response has nested data structure
       res.json({
-        ...responseData,
+        ...finalResponseData,
         _cookies: cookies, // Add cookies to response (frontend will use this)
       });
     } else if (responseData.downloads || responseData.captions) {
@@ -434,7 +469,7 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
       res.json({
         code: 0,
         message: 'ok',
-        data: responseData,
+        data: finalResponseData,
         _cookies: cookies, // Add cookies to response (frontend will use this)
       });
     } else {
@@ -721,6 +756,108 @@ router.get('/download-proxy', async (req, res) => {
       },
     });
 
+    // Validate file availability with HEAD request before downloading
+    // This checks if the file exists and is accessible before streaming
+    try {
+      const headHeaders = { ...headers };
+      delete headHeaders.Range; // HEAD requests don't need Range header
+      
+      console.log('Validating file availability with HEAD request...');
+      const headResponse = await axios.head(url, {
+        headers: headHeaders,
+        timeout: 10000, // 10 seconds for validation
+        maxRedirects: 5,
+        validateStatus: (status) => status < 500, // Don't throw on 4xx, we'll handle it
+      });
+      
+      // Check for various error conditions
+      if (headResponse.status === 404) {
+        console.error('File not found (404) on CDN');
+        return res.status(404).json({
+          error: 'File not found on CDN',
+          message: 'The requested file is not available. It may have been removed or the URL is invalid.',
+        });
+      }
+      
+      if (headResponse.status === 403) {
+        // Could be region restriction or expired URL
+        const isExpired = url.includes('sign=') || url.includes('&t=');
+        console.error('Access forbidden (403):', {
+          isExpired: isExpired,
+          urlPreview: url.substring(0, 100) + '...',
+        });
+        
+        if (isExpired) {
+          return res.status(410).json({
+            error: 'Download URL expired',
+            message: 'The download URL has expired. Please try again to get a fresh URL.',
+          });
+        } else {
+          return res.status(403).json({
+            error: 'Region restriction',
+            message: 'This content is not available in your region or access is restricted.',
+          });
+        }
+      }
+      
+      if (headResponse.status === 401) {
+        console.error('Unauthorized (401) - likely expired URL');
+        return res.status(410).json({
+          error: 'Download URL expired',
+          message: 'The download URL has expired. Please try again to get a fresh URL.',
+        });
+      }
+      
+      if (headResponse.status >= 400) {
+        console.error(`File validation failed with status ${headResponse.status}`);
+        return res.status(headResponse.status).json({
+          error: 'File validation failed',
+          message: `The file could not be accessed (status: ${headResponse.status}).`,
+        });
+      }
+      
+      console.log('File validation successful:', {
+        status: headResponse.status,
+        contentType: headResponse.headers['content-type'],
+        contentLength: headResponse.headers['content-length'],
+      });
+    } catch (validationError) {
+      // Handle validation errors
+      if (validationError.response) {
+        const status = validationError.response.status;
+        if (status === 404) {
+          return res.status(404).json({
+            error: 'File not found on CDN',
+            message: 'The requested file is not available. It may have been removed or the URL is invalid.',
+          });
+        }
+        if (status === 403) {
+          const isExpired = url.includes('sign=') || url.includes('&t=');
+          if (isExpired) {
+            return res.status(410).json({
+              error: 'Download URL expired',
+              message: 'The download URL has expired. Please try again to get a fresh URL.',
+            });
+          } else {
+            return res.status(403).json({
+              error: 'Region restriction',
+              message: 'This content is not available in your region or access is restricted.',
+            });
+          }
+        }
+        if (status === 401) {
+          return res.status(410).json({
+            error: 'Download URL expired',
+            message: 'The download URL has expired. Please try again to get a fresh URL.',
+          });
+        }
+      }
+      
+      // For other validation errors (timeout, network, etc.), log but continue
+      // The actual download request will handle these
+      console.warn('File validation warning (continuing with download):', validationError.message);
+    }
+
     // Fetch the file with proper headers
     let response;
     try {
@@ -752,6 +889,36 @@ router.get('/download-proxy', async (req, res) => {
         errorCode: downloadError.code,
       });
       console.error('=== END MEDIA FILE DOWNLOAD ERROR ===');
+      
+      // Handle specific error cases with appropriate status codes and messages
+      if (downloadError.response) {
+        const status = downloadError.response.status;
+        if (status === 404) {
+          throw {
+            ...downloadError,
+            userMessage: 'File not found on CDN',
+            statusCode: 404,
+          };
+        }
+        if (status === 403) {
+          const isExpired = url.includes('sign=') || url.includes('&t=');
+          throw {
+            ...downloadError,
+            userMessage: isExpired 
+              ? 'Download URL expired - please try again'
+              : 'Region restriction - content not available in your region',
+            statusCode: isExpired ? 410 : 403,
+          };
+        }
+        if (status === 401) {
+          throw {
+            ...downloadError,
+            userMessage: 'Download URL expired - please try again',
+            statusCode: 410,
+          };
+        }
+      }
+      
       throw downloadError; // Re-throw to be handled by outer catch
     }
 
@@ -840,17 +1007,38 @@ router.get('/download-proxy', async (req, res) => {
     console.error('Error proxying download:', error.message);
     console.error('Download URL:', req.query.url ? req.query.url.substring(0, 150) + '...' : 'MISSING');
     console.error('Error details:', {
-      status: error.response?.status,
+      status: error.response?.status || error.statusCode,
       statusText: error.response?.statusText,
       hasCookies: !!req.query.cookies,
       errorCode: error.code,
+      userMessage: error.userMessage,
     });
     console.error('=== END DOWNLOAD PROXY ERROR ===');
     
     if (!res.headersSent) {
-      res.status(error.response?.status || 500).json({
-        error: 'Failed to proxy download',
-        message: error.message,
+      // Use specific error message if available, otherwise use generic message
+      const errorMessage = error.userMessage || error.message || 'Failed to proxy download';
+      const statusCode = error.statusCode || error.response?.status || 500;
+      
+      // Map specific error types to user-friendly messages
+      let finalMessage = errorMessage;
+      if (error.response?.status === 404) {
+        finalMessage = 'File not found on CDN';
+      } else if (error.response?.status === 403) {
+        const isExpired = req.query.url && (req.query.url.includes('sign=') || req.query.url.includes('&t='));
+        finalMessage = isExpired 
+          ? 'Download URL expired - please try again'
+          : 'Region restriction - content not available in your region';
+      } else if (error.response?.status === 401) {
+        finalMessage = 'Download URL expired - please try again';
+      }
+      
+      res.status(statusCode).json({
+        error: error.response?.status === 404 ? 'File not found on CDN' :
+               error.response?.status === 403 ? (req.query.url && (req.query.url.includes('sign=') || req.query.url.includes('&t=')) ? 'Download URL expired' : 'Region restriction') :
+               error.response?.status === 401 ? 'Download URL expired' :
+               'Failed to proxy download',
+        message: finalMessage,
       });
     }
   }

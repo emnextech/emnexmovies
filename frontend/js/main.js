@@ -1066,27 +1066,41 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     // Get download metadata
     const metadata = await api.getDownloadMetadata(subjectId, detailPath, season, episode);
     
+    // Check hasResource flag - if false, no files are available
+    if (!metadata.hasResource) {
+      throw new Error('File not available (hasResource: false). This content may not be downloadable.');
+    }
+    
     const downloads = metadata.downloads || [];
     const captions = metadata.captions || [];
     // Extract cookies from metadata response (CRITICAL: required for media file downloads)
     const cookies = metadata.cookies || null;
 
-    if (downloads.length === 0) {
-      throw new Error('No video files available');
+    // Filter downloads to only include entries with valid URLs (additional safety check)
+    const availableDownloads = downloads.filter(download => {
+      const hasValidUrl = !!download.url;
+      if (!hasValidUrl) {
+        console.warn(`Skipping download ${download.id} (resolution: ${download.resolution}): no valid URL`);
+      }
+      return hasValidUrl;
+    });
+
+    if (availableDownloads.length === 0) {
+      throw new Error('No video files available. All download entries are missing or unavailable.');
     }
 
-    // Select quality - downloads array has resolution field
+    // Select quality - use filtered available downloads
     let selectedFile = null;
     if (quality === 'BEST') {
       // Sort by resolution descending and take highest
-      selectedFile = [...downloads].sort((a, b) => (b.resolution || 0) - (a.resolution || 0))[0];
+      selectedFile = [...availableDownloads].sort((a, b) => (b.resolution || 0) - (a.resolution || 0))[0];
     } else if (quality === 'WORST') {
       // Sort by resolution ascending and take lowest
-      selectedFile = [...downloads].sort((a, b) => (a.resolution || 0) - (b.resolution || 0))[0];
+      selectedFile = [...availableDownloads].sort((a, b) => (a.resolution || 0) - (b.resolution || 0))[0];
     } else {
       // Match quality string (e.g., "1080P" -> 1080)
       const qualityNum = parseInt(quality.replace('P', '')) || 0;
-      selectedFile = downloads.find(f => f.resolution === qualityNum) || downloads[0];
+      selectedFile = availableDownloads.find(f => f.resolution === qualityNum) || availableDownloads[0];
     }
 
     if (!selectedFile || !selectedFile.url) {
@@ -1146,12 +1160,14 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     // Use proxy endpoint for download with proper headers
     const proxyUrl = `/api/download-proxy?${params.toString()}`;
     
-    // Create download link using proxy
+    // CRITICAL: Download immediately after getting signed URL to prevent expiration
+    // Signed URLs (with sign= and t= parameters) expire quickly, so we must use them immediately
+    // Create download link using proxy and trigger immediately (no delays)
     const videoLink = document.createElement('a');
     videoLink.href = proxyUrl;
     videoLink.download = ''; // Let backend set the filename via Content-Disposition header
     document.body.appendChild(videoLink);
-    videoLink.click();
+    videoLink.click(); // Trigger download immediately - signed URLs expire quickly
     document.body.removeChild(videoLink);
 
     // Download subtitle if selected

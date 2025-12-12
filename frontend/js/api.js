@@ -225,7 +225,8 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
   // Ensure downloads and captions arrays exist with size information
   // CRITICAL: Extract resource.url from each download (this is the actual media URL)
   // Fallback to download.url if resource.url doesn't exist
-  const downloads = (data.downloads || []).map(download => {
+  // Filter to only include entries with valid URLs (hasResource check)
+  const allDownloads = (data.downloads || []).map(download => {
     // Ensure size is preserved as string (API returns it as string)
     const size = download.size || download.fileSize || null;
     
@@ -233,12 +234,14 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
     // If resource.url doesn't exist, fallback to download.url
     const mediaUrl = download.resource?.url || download.url || null;
     const urlSource = download.resource?.url ? 'resource.url' : (download.url ? 'download.url' : 'none');
+    const hasResourceFlag = download.resource?.hasResource !== false;
     
     console.log(`Processing download ${download.id}:`, {
       resolution: download.resolution,
       urlSource: urlSource,
       urlPreview: mediaUrl ? mediaUrl.substring(0, 80) + '...' : 'MISSING URL!',
       hasResource: !!download.resource,
+      hasResourceFlag: hasResourceFlag,
     });
     
     return {
@@ -246,8 +249,29 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
       url: mediaUrl, // Use resource.url if available, otherwise download.url
       resolution: download.resolution,
       size: size, // File size in bytes (as string from API, e.g., "623914683")
+      hasResource: hasResourceFlag, // Include hasResource flag for filtering
     };
   });
+  
+  // Filter downloads to only include entries with valid URLs
+  // Check: hasResource flag is not false AND URL exists
+  const downloads = allDownloads.filter(download => {
+    const hasValidUrl = !!download.url;
+    const hasResource = download.hasResource !== false;
+    const isValid = hasResource && hasValidUrl;
+    
+    if (!isValid) {
+      console.log(`Filtered out download ${download.id} (resolution: ${download.resolution}):`, {
+        hasResource: hasResource,
+        hasValidUrl: hasValidUrl,
+        reason: !hasResource ? 'hasResource is false' : (!hasValidUrl ? 'no valid URL' : 'unknown'),
+      });
+    }
+    
+    return isValid;
+  });
+  
+  console.log(`Filtered downloads: ${downloads.length} available out of ${allDownloads.length} total`);
   
   const captions = (data.captions || []).map(caption => ({
     id: caption.id,
@@ -258,7 +282,10 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
     delay: caption.delay || 0,
   }));
   
-  console.log('Processed downloads:', downloads.map(d => ({ 
+  // Remove hasResource from final download objects (not needed by consumers)
+  const finalDownloads = downloads.map(({ hasResource, ...download }) => download);
+  
+  console.log('Processed downloads:', finalDownloads.map(d => ({ 
     resolution: d.resolution, 
     hasSize: !!d.size, 
     size: d.size,
@@ -267,12 +294,12 @@ async function getDownloadMetadata(subjectId, detailPath, season = 0, episode = 
   })));
   
   return {
-    downloads: downloads,
+    downloads: finalDownloads, // Use filtered downloads without hasResource field
     captions: captions,
     limited: data.limited || false,
     limitedCode: data.limitedCode || '',
     freeNum: data.freeNum || 0,
-    hasResource: data.hasResource || false,
+    hasResource: finalDownloads.length > 0, // Update hasResource based on filtered results
     cookies: cookies, // Return cookies so frontend can pass them to download endpoint
   };
 }
