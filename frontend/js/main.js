@@ -900,7 +900,7 @@ async function loadQualitySizes(subjectId, detailPath, qualitySelector, sizeInfo
       selectedFile = [...downloads].sort((a, b) => (a.resolution || 0) - (b.resolution || 0))[0];
     } else {
       const qualityNum = parseInt(selectedQuality.replace('P', '')) || 0;
-      selectedFile = downloads.find(f => f.resolution === qualityNum) || downloads[0];
+      selectedFile = downloads.find(f => f.resolution === qualityNum);
     }
 
     if (selectedFile) {
@@ -1141,7 +1141,7 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     } else {
       // Match quality string (e.g., "1080P" -> 1080)
       const qualityNum = parseInt(quality.replace('P', '')) || 0;
-      selectedFile = availableDownloads.find(f => f.resolution === qualityNum) || availableDownloads[0];
+      selectedFile = availableDownloads.find(f => f.resolution === qualityNum);
     }
 
     if (!selectedFile || !selectedFile.url) {
