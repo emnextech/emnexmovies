@@ -1221,10 +1221,26 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       console.log('Starting native browser download...');
       console.log('Proxy URL:', proxyUrl);
       
+      // Generate a basic filename from available metadata (optional - backend will set proper filename)
+      // The browser will use the Content-Disposition header from the server anyway
+      let filename = '';
+      if (title) {
+        const extension = selectedFile.url?.includes('.mp4') ? '.mp4' : 
+                        selectedFile.url?.includes('.mkv') ? '.mkv' : 
+                        selectedFile.url?.includes('.webm') ? '.webm' : '.mp4';
+        const resStr = selectedFile.resolution ? `${selectedFile.resolution}p` : '';
+        const seasonEpisodeStr = (season && episode && parseInt(season) > 0 && parseInt(episode) > 0) 
+          ? ` S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}` 
+          : '';
+        filename = `${title}${seasonEpisodeStr}${resStr ? ' ' + resStr : ''}${extension}`;
+      }
+      
+      console.log('Generated filename:', filename || 'none (will use server filename)');
+      
       // Create anchor tag for native browser download
       const downloadLink = document.createElement('a');
       downloadLink.href = proxyUrl;
-      downloadLink.download = filename || ''; // Set filename if available
+      downloadLink.download = filename; // Set filename (optional - server will override with Content-Disposition)
       downloadLink.style.display = 'none'; // Hide the link
       
       // Add to DOM temporarily
