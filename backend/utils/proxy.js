@@ -28,7 +28,10 @@ async function ensureCookiesAreAssigned() {
     globalCookies = mbCookies.trim();
     cookiesInitialized = true;
     console.log('Using cookies from MB_COOKIES environment variable');
-    console.log('Cookies preview:', globalCookies.substring(0, 50) + '...');
+    console.log('Cookies preview:', globalCookies.substring(0, 100) + '...');
+    console.log('Cookies full length:', globalCookies.length);
+    console.log('Cookies contains i18n_lang:', globalCookies.includes('i18n_lang'));
+    console.log('Cookies contains account:', globalCookies.includes('account'));
     return globalCookies;
   }
 

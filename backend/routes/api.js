@@ -400,6 +400,8 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
       cookiesPreview: cookies ? cookies.substring(0, 100) + '...' : 'none',
       cookiesFull: cookies, // Log full cookies for debugging
       cookiesLength: cookies ? cookies.length : 0,
+      hasI18nLang: cookies ? cookies.includes('i18n_lang') : false,
+      hasAccount: cookies ? cookies.includes('account') : false,
     });
     
     // Log detailed information about each download including resource URLs

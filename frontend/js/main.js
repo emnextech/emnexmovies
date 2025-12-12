@@ -1101,7 +1101,10 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     console.log('Metadata received:', { 
       hasResource: metadata.hasResource, 
       downloadsCount: metadata.downloads?.length || 0,
-      hasCookies: !!metadata.cookies 
+      hasCookies: !!metadata.cookies,
+      cookiesPreview: metadata.cookies ? metadata.cookies.substring(0, 100) + '...' : 'NO COOKIES',
+      cookiesLength: metadata.cookies ? metadata.cookies.length : 0,
+      hasI18nLang: metadata.cookies ? metadata.cookies.includes('i18n_lang') : false,
     });
     
     // Check hasResource flag - if false, no files are available
