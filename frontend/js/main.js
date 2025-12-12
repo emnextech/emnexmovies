@@ -1221,20 +1221,31 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       console.log('Download response status:', downloadResponse.status, downloadResponse.statusText);
       
       if (!downloadResponse.ok) {
-        const errorText = await downloadResponse.text().catch(() => 'Unknown error');
-        throw new Error(`Download failed: ${downloadResponse.status} ${downloadResponse.statusText}. ${errorText}`);
-      }
-      
-      // Get filename from Content-Disposition header if available
-      const contentDisposition = downloadResponse.headers.get('Content-Disposition');
-      let filename = null;
-      if (contentDisposition) {
-        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-        if (filenameMatch && filenameMatch[1]) {
-          filename = decodeURIComponent(filenameMatch[1].replace(/['"]/g, ''));
+        // Check if it's a JSON error response
+        const contentType = downloadResponse.headers.get('Content-Type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await downloadResponse.json().catch(() => null);
+          const errorMessage = errorData?.message || errorData?.error || `Download failed: ${downloadResponse.status}`;
+          throw new Error(errorMessage);
+        } else {
+          const errorText = await downloadResponse.text().catch(() => 'Unknown error');
+          throw new Error(`Download failed: ${downloadResponse.status} ${downloadResponse.statusText}. ${errorText}`);
         }
       }
-      
+
+      // Check Content-Type to ensure it's a video file
+      const contentType = downloadResponse.headers.get('Content-Type');
+      if (!contentType || (!contentType.includes('video') && !contentType.includes('application/octet-stream'))) {
+        // If it's not a video, it might be an error response
+        const responseText = await downloadResponse.text();
+        try {
+          const errorData = JSON.parse(responseText);
+          throw new Error(errorData.message || errorData.error || 'Invalid response from server');
+        } catch (e) {
+          throw new Error('Server returned non-video content. Please try again.');
+        }
+      }
+
       console.log('Download response received, creating blob...');
       const blob = await downloadResponse.blob();
       console.log('Blob created, size:', blob.size, 'bytes');
@@ -1259,7 +1270,15 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       ui.showToast('Download started successfully', 'success');
     } catch (error) {
       console.error('Download fetch error:', error);
-      ui.showToast('Download failed: ' + error.message, 'error');
+      
+      // Don't show toast if it's a user cancellation
+      if (error.name === 'AbortError') {
+        return;
+      }
+      
+      // Show user-friendly error message
+      const errorMessage = error.message || 'Download failed. Please try again.';
+      ui.showToast(errorMessage, 'error');
       throw error; // Re-throw to be caught by outer catch block
     }
 
