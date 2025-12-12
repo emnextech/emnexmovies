@@ -377,22 +377,33 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     // Ensure the structure matches the API documentation
     const responseData = response.data || {};
     
+    // Extract cookies from response (required for actual file downloads)
+    // MovieBox sets cookies like: account=...; i18n_lang=en
+    const cookies = response.cookies || null;
+    
     // Log response for debugging
     console.log('Download metadata response:', {
       hasData: !!responseData.data,
       downloadsCount: responseData.data?.downloads?.length || responseData.downloads?.length || 0,
       captionsCount: responseData.data?.captions?.length || responseData.captions?.length || 0,
+      hasCookies: !!cookies,
+      cookiesPreview: cookies ? cookies.substring(0, 50) + '...' : 'none',
     });
     
+    // Include cookies in response so frontend can pass them to download endpoint
     if (responseData.data) {
       // If response has nested data structure
-      res.json(responseData);
+      res.json({
+        ...responseData,
+        _cookies: cookies, // Add cookies to response (frontend will use this)
+      });
     } else if (responseData.downloads || responseData.captions) {
       // If response already has downloads/captions at root level
       res.json({
         code: 0,
         message: 'ok',
         data: responseData,
+        _cookies: cookies, // Add cookies to response (frontend will use this)
       });
     } else {
       // Empty response - return structure with empty arrays
@@ -403,6 +414,8 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
           downloads: [],
           captions: [],
           limited: false,
+        },
+        _cookies: cookies, // Add cookies to response (frontend will use this)
           limitedCode: '',
           freeNum: 0,
           hasResource: false,
@@ -650,8 +663,24 @@ router.get('/download-proxy', async (req, res) => {
       return res.status(400).json({ error: 'url query parameter is required' });
     }
 
-    // Get download headers with proper referer (always uses https://fmoviesunblocked.net/)
-    const headers = getMediaDownloadHeaders(url);
+    // Get cookies from query params if provided (from metadata request)
+    const cookies = req.query.cookies || null;
+    
+    // Get Range header from client request, or default to bytes=0-
+    const range = req.headers.range || "bytes=0-";
+    
+    // Get media download headers with cookies and range
+    // These are DIFFERENT from metadata headers - MovieBox requires strict headers for downloads
+    const headers = getMediaDownloadHeaders(url, cookies, range);
+
+    console.log('Downloading media file with headers:', {
+      url: url.substring(0, 100) + '...',
+      hasCookies: !!cookies,
+      range: range,
+      referer: headers.Referer,
+      origin: headers.Origin,
+      userAgent: headers['User-Agent'],
+    });
 
     // Fetch the file with proper headers
     const response = await axios.get(url, {

@@ -46,27 +46,43 @@ function getDownloadHeaders(detailPath = null) {
 
 /**
  * Get headers for media file downloads (video/subtitle files)
- * Based on src/moviebox_api/constants.py DOWNLOAD_REQUEST_HEADERS
- * According to user requirements:
- * - Accept: * / *
- * - User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0
- * - Origin: [The selected Moviebox host, e.g., https://h5.aoneroom.com]
- * - Referer: https://fmoviesunblocked.net/
- * @param {string} downloadUrl - Optional download URL (for referer fallback)
+ * MovieBox requires strict headers for actual file downloads (not metadata)
+ * 
+ * Required headers include:
+ * - Accept header with wildcard value
+ * - User-Agent: Firefox Linux user agent string
+ * - Origin: MovieBox host URL
+ * - Referer: Must be exactly fmoviesunblocked.net
+ * - Range: Byte range for resumable downloads
+ * - accept-language: Language preferences
+ * - Cookie: account and i18n_lang cookies from metadata page
+ * 
+ * @param {string} downloadUrl - Optional download URL
+ * @param {string} cookies - Optional cookies string from metadata request
+ * @param {string} range - Optional Range header value
  * @returns {Object} Headers object
  */
-function getMediaDownloadHeaders(downloadUrl = null) {
+function getMediaDownloadHeaders(downloadUrl = null, cookies = null, range = "bytes=0-") {
   // Origin should be the full selected host URL (e.g., https://h5.aoneroom.com)
   const origin = SELECTED_HOST.replace(/\/$/, ''); // Remove trailing slash if present
-  // Referer should always be https://fmoviesunblocked.net/ for media downloads
+  // Referer MUST be exactly https://fmoviesunblocked.net/ - MovieBox blocks other referers
   const referer = DOWNLOAD_REQUEST_REFERER;
   
-  return {
+  const headers = {
     "Accept": "*/*",
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
     "Origin": origin,
     "Referer": referer,
+    "Range": range,
+    "accept-language": "en-US,en;q=0.5",
   };
+  
+  // Add cookies if provided (required for MovieBox downloads)
+  if (cookies) {
+    headers["Cookie"] = cookies;
+  }
+  
+  return headers;
 }
 
 module.exports = {

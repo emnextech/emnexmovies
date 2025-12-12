@@ -45,6 +45,8 @@ async function makeRequest(endpoint, options = {}) {
           url,
           headers: requestHeaders,
           timeout: 60000, // 60 seconds (increased for Vercel)
+          // Enable cookie handling - axios will automatically handle Set-Cookie headers
+          withCredentials: false, // We'll manually extract cookies
         };
 
         if (data) {
@@ -56,6 +58,23 @@ async function makeRequest(endpoint, options = {}) {
         }
 
         const response = await axios(config);
+        
+        // Extract cookies from Set-Cookie headers if present
+        // Store them in response for later use in download requests
+        if (response.headers['set-cookie']) {
+          // Convert Set-Cookie array to cookie string format
+          const cookies = response.headers['set-cookie']
+            .map(cookie => {
+              // Extract cookie name and value (before first semicolon)
+              const cookiePart = cookie.split(';')[0].trim();
+              return cookiePart;
+            })
+            .join('; ');
+          
+          // Attach cookies to response object for easy access
+          response.cookies = cookies;
+        }
+        
         return response;
       } catch (error) {
         lastError = error;

@@ -6,22 +6,24 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const { getDownloadHeaders } = require('../utils/headers');
 
 /**
  * GET /api/download
  * Streams video files to browser
+ * Query params: url, filename, cookies (optional - cookies from metadata page)
  */
 router.get('/download', async (req, res) => {
   try {
-    const { url, filename } = req.query;
+    const { url, filename, cookies } = req.query;
 
     if (!url) {
       return res.status(400).json({ error: 'URL parameter is required' });
     }
 
-    // Get download headers
-    const headers = getDownloadHeaders();
+    // Get media download headers (NOT metadata headers - these are different!)
+    // Include cookies from metadata request if provided
+    const range = req.headers.range || "bytes=0-";
+    const headers = require('../utils/headers').getMediaDownloadHeaders(url, cookies, range);
 
     // Make request to video URL with streaming
     const response = await axios({
@@ -30,6 +32,7 @@ router.get('/download', async (req, res) => {
       headers: headers,
       responseType: 'stream',
       timeout: 300000, // 5 minutes for large files
+      maxRedirects: 5,
     });
 
     // Set response headers
@@ -47,9 +50,9 @@ router.get('/download', async (req, res) => {
     }
 
     // Handle Range requests for resumable downloads
-    const range = req.headers.range;
-    if (range && contentLength) {
-      const parts = range.replace(/bytes=/, '').split('-');
+    const clientRange = req.headers.range;
+    if (clientRange && contentLength) {
+      const parts = clientRange.replace(/bytes=/, '').split('-');
       const start = parseInt(parts[0], 10);
       const end = parts[1] ? parseInt(parts[1], 10) : parseInt(contentLength, 10) - 1;
       const chunksize = end - start + 1;
@@ -59,15 +62,17 @@ router.get('/download', async (req, res) => {
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Length', chunksize);
 
+      // Get headers with specific range for this request
+      const rangeHeaders = require('../utils/headers').getMediaDownloadHeaders(url, cookies, `bytes=${start}-${end}`);
+
       // Stream the requested range
       const stream = await axios({
         method: 'GET',
         url: url,
-        headers: {
-          ...headers,
-          Range: `bytes=${start}-${end}`,
-        },
+        headers: rangeHeaders,
         responseType: 'stream',
+        timeout: 300000,
+        maxRedirects: 5,
       });
 
       stream.data.pipe(res);
@@ -90,22 +95,26 @@ router.get('/download', async (req, res) => {
 /**
  * GET /api/download-subtitle
  * Downloads subtitle files
+ * Query params: url, filename, cookies (optional - cookies from metadata page)
  */
 router.get('/download-subtitle', async (req, res) => {
   try {
-    const { url, filename } = req.query;
+    const { url, filename, cookies } = req.query;
 
     if (!url) {
       return res.status(400).json({ error: 'URL parameter is required' });
     }
 
-    const headers = getDownloadHeaders();
+    // Use media download headers for subtitles too (they may also require cookies)
+    const headers = require('../utils/headers').getMediaDownloadHeaders(url, cookies, "bytes=0-");
 
     const response = await axios({
       method: 'GET',
       url: url,
       headers: headers,
       responseType: 'stream',
+      timeout: 60000, // 1 minute for subtitle files
+      maxRedirects: 5,
     });
 
     const contentType = response.headers['content-type'] || 'text/vtt';
