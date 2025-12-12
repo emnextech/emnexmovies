@@ -781,6 +781,11 @@ function renderMovieDetails(movieData) {
 
   // Add download button handler - use browser download
   const downloadBtn = document.getElementById('download-btn');
+  if (!downloadBtn) {
+    console.error('ERROR: Download button element not found in DOM!');
+  } else {
+    console.log('Download button found, setting up event listener...');
+  }
   const qualitySelector = document.getElementById('quality-selector');
   const subtitleSelector = document.getElementById('subtitle-selector');
   const qualitySizeInfo = document.getElementById('quality-size-info');
@@ -852,6 +857,8 @@ function renderMovieDetails(movieData) {
   }
 
   downloadBtn.addEventListener('click', async () => {
+    console.log('=== DOWNLOAD BUTTON CLICKED ===');
+    
     const quality = qualitySelector.value;
     const subtitleLang = subtitleSelector.value === 'None' ? '' : subtitleSelector.value;
     // For movies: se=0, ep=0 (default)
@@ -864,6 +871,7 @@ function renderMovieDetails(movieData) {
       season = 0;
     }
 
+    console.log('Calling handleBrowserDownload with:', { subjectId, detailPath, quality, subtitleLang, season, episode });
     await handleBrowserDownload(subjectId, detailPath, quality, subtitleLang, season, episode);
   });
 }
@@ -1058,7 +1066,17 @@ function updateEpisodeDropdown(seasons) {
  * Handle browser download (direct download using browser's native download)
  */
 async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLang, season = 0, episode = 0) {
+  console.log('=== handleBrowserDownload CALLED ===');
+  console.log('Parameters:', { subjectId, detailPath, quality, subtitleLang, season, episode });
+  
   const downloadBtn = document.getElementById('download-btn');
+  if (!downloadBtn) {
+    console.error('ERROR: Download button not found!');
+    ui.showToast('Download button not found', 'error');
+    return;
+  }
+  console.log('Download button found, disabling...');
+  
   downloadBtn.disabled = true;
   downloadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Loading...';
 
@@ -1070,10 +1088,21 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       return path;
     }
   };
+  
+  console.log('Config:', { 
+    hasAppConfig: !!window.appConfig, 
+    API_BASE_URL: config.API_BASE_URL || 'not set' 
+  });
 
   try {
+    console.log('Fetching download metadata...');
     // Get download metadata
     const metadata = await api.getDownloadMetadata(subjectId, detailPath, season, episode);
+    console.log('Metadata received:', { 
+      hasResource: metadata.hasResource, 
+      downloadsCount: metadata.downloads?.length || 0,
+      hasCookies: !!metadata.cookies 
+    });
     
     // Check hasResource flag - if false, no files are available
     if (!metadata.hasResource) {
