@@ -33,7 +33,7 @@ function getDefaultHeaders(referer = null) {
 function getDownloadHeaders(detailPath = null, cookies = null) {
   const host = SELECTED_HOST.replace(/^https?:\/\//, '');
   // Referer must match the movie's detail page URL for download metadata requests
-  const referer = detailPath ? `${HOST_URL}movies/${detailPath}` : HOST_URL;
+  const referer = detailPath ? `${HOST_URL}movies/${detailPath.replace(/^\//, '')}` : HOST_URL;
   
   const headers = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
