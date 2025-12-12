@@ -1,7 +1,7 @@
 {
   "version": 2,
-  "buildCommand": "echo 'Static site - deploying from root'",
-  "outputDirectory": "frontend",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".",
   "headers": [
     {
       "source": "/(.*)",
@@ -23,3 +23,4 @@
     }
   ]
 }
+

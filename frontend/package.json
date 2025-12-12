@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Frontend static site for movie download website",
   "scripts": {
-    "build": "echo 'Static site ready - no build needed'"
+    "build": "node -e \"console.log('Static site ready');\""
   },
   "keywords": ["movie", "frontend", "static"],
   "author": "",
