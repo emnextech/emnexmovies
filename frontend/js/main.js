@@ -1215,78 +1215,33 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     
     // CRITICAL: Download immediately after getting signed URL to prevent expiration
     // Signed URLs (with sign= and t= parameters) expire quickly, so we must use them immediately
-    // Use fetch + blob approach for better error handling and CORS support
+    // Use native browser download - create anchor tag and click it
+    // This lets the browser's native download manager handle the file (works for any size)
     try {
-      console.log('Starting download via fetch...');
+      console.log('Starting native browser download...');
+      console.log('Proxy URL:', proxyUrl);
       
-      const downloadResponse = await fetch(proxyUrl, {
-        method: 'GET',
-        credentials: 'include',
-        mode: 'cors',
-      });
+      // Create anchor tag for native browser download
+      const downloadLink = document.createElement('a');
+      downloadLink.href = proxyUrl;
+      downloadLink.download = filename || ''; // Set filename if available
+      downloadLink.style.display = 'none'; // Hide the link
       
-      console.log('Download response status:', downloadResponse.status, downloadResponse.statusText);
-      console.log('Download response headers:', {
-        contentType: downloadResponse.headers.get('Content-Type'),
-        contentDisposition: downloadResponse.headers.get('Content-Disposition'),
-        contentLength: downloadResponse.headers.get('Content-Length'),
-      });
+      // Add to DOM temporarily
+      document.body.appendChild(downloadLink);
       
-      if (!downloadResponse.ok) {
-        // Check if it's a JSON error response
-        const contentType = downloadResponse.headers.get('Content-Type');
-        if (contentType && contentType.includes('application/json')) {
-          const errorData = await downloadResponse.json().catch(() => null);
-          const errorMessage = errorData?.message || errorData?.error || `Download failed: ${downloadResponse.status}`;
-          throw new Error(errorMessage);
-        } else {
-          const errorText = await downloadResponse.text().catch(() => 'Unknown error');
-          throw new Error(`Download failed: ${downloadResponse.status} ${downloadResponse.statusText}. ${errorText}`);
-        }
-      }
-
-      // Check Content-Type to ensure it's a video file
-      const contentType = downloadResponse.headers.get('Content-Type');
-      if (!contentType || (!contentType.includes('video') && !contentType.includes('application/octet-stream'))) {
-        // If it's not a video, it might be an error response
-        const responseText = await downloadResponse.text();
-        try {
-          const errorData = JSON.parse(responseText);
-          throw new Error(errorData.message || errorData.error || 'Invalid response from server');
-        } catch (e) {
-          throw new Error('Server returned non-video content. Please try again.');
-        }
-      }
-
-      console.log('Download response received, creating blob...');
-      const blob = await downloadResponse.blob();
-      console.log('Blob created, size:', blob.size, 'bytes');
+      console.log('Triggering native browser download...');
+      downloadLink.click();
       
-      const blobUrl = URL.createObjectURL(blob);
-      
-      const videoLink = document.createElement('a');
-      videoLink.href = blobUrl;
-      videoLink.download = filename || ''; // Use filename from Content-Disposition if available
-      document.body.appendChild(videoLink);
-      
-      console.log('Triggering download...');
-      videoLink.click();
-      document.body.removeChild(videoLink);
-      
-      // Clean up blob URL after a delay
+      // Remove from DOM after a short delay
       setTimeout(() => {
-        URL.revokeObjectURL(blobUrl);
-        console.log('Blob URL revoked');
-      }, 1000);
+        document.body.removeChild(downloadLink);
+        console.log('Download link removed from DOM');
+      }, 100);
       
       ui.showToast('Download started successfully', 'success');
     } catch (error) {
-      console.error('Download fetch error:', error);
-      
-      // Don't show toast if it's a user cancellation
-      if (error.name === 'AbortError') {
-        return;
-      }
+      console.error('Download error:', error);
       
       // Show user-friendly error message
       const errorMessage = error.message || 'Download failed. Please try again.';
