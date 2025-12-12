@@ -30,12 +30,12 @@ function getDefaultHeaders(referer = null) {
  * @param {string} detailPath - Detail path for the movie/TV series
  * @returns {Object} Headers object
  */
-function getDownloadHeaders(detailPath = null) {
+function getDownloadHeaders(detailPath = null, cookies = null) {
   const host = SELECTED_HOST.replace(/^https?:\/\//, '');
   // Referer must match the movie's detail page URL for download metadata requests
   const referer = detailPath ? `${HOST_URL}movies/${detailPath}` : HOST_URL;
   
-  return {
+  const headers = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "en-US,en;q=0.5",
     "user-agent": "Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0",
@@ -43,6 +43,13 @@ function getDownloadHeaders(detailPath = null) {
     "Host": host,
     "X-client-info": '{"timezone":"Africa/Nairobi"}',
   };
+  
+  // Add cookies if provided (from MB_COOKIES env var or dynamic fetching)
+  if (cookies) {
+    headers["Cookie"] = cookies;
+  }
+  
+  return headers;
 }
 
 /**

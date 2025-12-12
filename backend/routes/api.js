@@ -358,10 +358,15 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
 
     // Use download headers with correct Accept header and referer
     // Referer should be the movie detail page URL
-    const headers = getDownloadHeaders(detailPath);
+    // Get cookies (from MB_COOKIES env var or dynamic fetching) to include in headers
+    const { ensureCookiesAreAssigned } = require('../utils/proxy');
+    const requestCookies = await ensureCookiesAreAssigned();
+    
+    const headers = getDownloadHeaders(detailPath, requestCookies);
     
     console.log('Fetching download metadata:', { subjectId, se, ep, detailPath });
     console.log('Using headers:', JSON.stringify(headers, null, 2));
+    console.log('Has cookies:', !!requestCookies);
 
     const response = await makeRequest('wefeed-h5-bff/web/subject/download', {
       method: 'GET',
@@ -379,7 +384,8 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     
     // Extract cookies from response (required for actual file downloads)
     // MovieBox sets cookies like: account=...; i18n_lang=en
-    const cookies = response.cookies || null;
+    // Use cookies from response if available, otherwise use request cookies
+    const cookies = response.cookies || requestCookies || null;
     
     // Get downloads array for detailed logging
     const allDownloads = responseData.data?.downloads || responseData.downloads || [];

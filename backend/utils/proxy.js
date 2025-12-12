@@ -12,8 +12,8 @@ let cookiesInitialized = false;
 let globalCookies = null;
 
 /**
- * Initialize cookies by calling the MovieBox app info endpoint
- * This must be called before making API requests to get the account cookie
+ * Get cookies from environment variable or initialize dynamically
+ * Priority: MB_COOKIES env var > dynamic fetching
  * @returns {Promise<string|null>} Cookie string or null if failed
  */
 async function ensureCookiesAreAssigned() {
@@ -22,8 +22,19 @@ async function ensureCookiesAreAssigned() {
     return globalCookies;
   }
 
+  // Check for MB_COOKIES environment variable first (Railway)
+  const mbCookies = process.env.MB_COOKIES;
+  if (mbCookies && mbCookies.trim()) {
+    globalCookies = mbCookies.trim();
+    cookiesInitialized = true;
+    console.log('Using cookies from MB_COOKIES environment variable');
+    console.log('Cookies preview:', globalCookies.substring(0, 50) + '...');
+    return globalCookies;
+  }
+
+  // Fallback to dynamic cookie fetching if MB_COOKIES not set
   try {
-    console.log('Initializing cookies from MovieBox app info endpoint...');
+    console.log('MB_COOKIES not set, initializing cookies from MovieBox app info endpoint...');
     const headers = getDefaultHeaders();
     const url = `${HOST_URL}wefeed-h5-bff/app/get-latest-app-pkgs?app_name=moviebox`;
     
@@ -46,7 +57,7 @@ async function ensureCookiesAreAssigned() {
       
       globalCookies = cookies;
       cookiesInitialized = true;
-      console.log('Cookies initialized successfully:', cookies.substring(0, 50) + '...');
+      console.log('Cookies initialized successfully from app info endpoint:', cookies.substring(0, 50) + '...');
       return cookies;
     } else {
       console.warn('No cookies received from app info endpoint');
@@ -82,6 +93,7 @@ async function makeRequest(endpoint, options = {}) {
   } = options;
 
   // Ensure cookies are initialized before making requests (unless this is the init request)
+  // Check MB_COOKIES env var first, then fallback to dynamic fetching
   if (!skipCookieInit && !cookiesInitialized) {
     await ensureCookiesAreAssigned();
   }
@@ -89,8 +101,9 @@ async function makeRequest(endpoint, options = {}) {
   const defaultHeaders = getDefaultHeaders();
   const requestHeaders = { ...defaultHeaders, ...headers };
   
-  // Add cookies to request headers if available
-  if (globalCookies) {
+  // Add cookies to request headers if available (from MB_COOKIES or dynamic fetching)
+  // Only add if not already present in custom headers
+  if (globalCookies && !requestHeaders['Cookie']) {
     requestHeaders['Cookie'] = globalCookies;
   }
 

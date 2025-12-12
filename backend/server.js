@@ -105,15 +105,21 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
   
-  // Initialize cookies in background (don't block server start)
-  setTimeout(async () => {
-    try {
-      const { ensureCookiesAreAssigned } = require('./utils/proxy');
-      await ensureCookiesAreAssigned();
-    } catch (error) {
-      console.warn('Cookie initialization failed (non-critical):', error.message);
-    }
-  }, 1000);
+  // Check if MB_COOKIES is set
+  if (process.env.MB_COOKIES) {
+    console.log('MB_COOKIES environment variable is set (using provided cookies)');
+  } else {
+    console.log('MB_COOKIES not set - will fetch cookies dynamically from MovieBox');
+    // Initialize cookies in background (don't block server start) only if MB_COOKIES not set
+    setTimeout(async () => {
+      try {
+        const { ensureCookiesAreAssigned } = require('./utils/proxy');
+        await ensureCookiesAreAssigned();
+      } catch (error) {
+        console.warn('Cookie initialization failed (non-critical):', error.message);
+      }
+    }, 1000);
+  }
 });
 
 // Handle graceful shutdown
