@@ -8,7 +8,9 @@ sh: 1: cd: can't cd to backend
 ERROR: failed to build: failed to solve: process "sh -c cd backend && npm install" did not complete successfully
 ```
 
-## The Solution (3 Steps)
+**This means Railway is still using `cd backend && npm install` in the Build Command.**
+
+## The Solution (Must Do in Railway Dashboard)
 
 ### Step 1: Set Root Directory in Railway Dashboard
 
@@ -19,16 +21,26 @@ ERROR: failed to build: failed to solve: process "sh -c cd backend && npm instal
 5. **Set it to:** `backend` (type exactly: `backend` without quotes)
 6. Click **Save** or it will auto-save
 
-### Step 2: Fix Build/Start Commands
+### Step 2: Fix Build Command
 
 1. Still in **Settings** tab
 2. Find **"Build Command"** section
-3. Make sure it says: `npm install` (NOT `cd backend && npm install`)
-4. Find **"Start Command"** section  
-5. Make sure it says: `npm start` (NOT `cd backend && npm start`)
-6. Save if needed
+3. **You probably see:** `cd backend && npm install` ❌
+4. **Change it to:** `npm install` ✅
+   - Delete everything and type just: `npm install`
+   - Remove `cd backend &&` completely
 
-### Step 3: Redeploy
+### Step 3: Fix Start Command
+
+1. Still in **Settings** tab
+2. Find **"Start Command"** section
+3. **You probably see:** `cd backend && npm start` ❌
+4. **Change it to:** `npm start` ✅
+   - Delete everything and type just: `npm start`
+   - Remove `cd backend &&` completely
+5. Settings should auto-save
+
+### Step 4: Redeploy
 
 1. Go to **Deployments** tab
 2. Click **"Redeploy"** on the latest deployment
