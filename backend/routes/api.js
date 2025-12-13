@@ -360,7 +360,14 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     // Referer should be the movie detail page URL
     // Get cookies (from MB_COOKIES env var or dynamic fetching) to include in headers
     const { ensureCookiesAreAssigned } = require('../utils/proxy');
-    const requestCookies = await ensureCookiesAreAssigned();
+    let requestCookies = await ensureCookiesAreAssigned();
+    
+    // Ensure i18n_lang cookie is present (API might require it for some movies)
+    // If missing, add default value
+    if (requestCookies && !requestCookies.includes('i18n_lang')) {
+      requestCookies = requestCookies + '; i18n_lang=en';
+      console.log('Added missing i18n_lang cookie to request');
+    }
     
     const headers = getDownloadHeaders(detailPath, requestCookies);
     
@@ -384,8 +391,22 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     
     // Extract cookies from response (required for actual file downloads)
     // MovieBox sets cookies like: account=...; i18n_lang=en
+    // The response.cookies should already be merged (account + i18n_lang) from makeRequest
     // Use cookies from response if available, otherwise use request cookies
     const cookies = response.cookies || requestCookies || null;
+    
+    // Log cookie status for debugging
+    if (cookies) {
+      const hasI18n = cookies.includes('i18n_lang');
+      const hasAccount = cookies.includes('account');
+      if (!hasI18n || !hasAccount) {
+        console.warn('Cookie warning:', {
+          hasI18n,
+          hasAccount,
+          cookiePreview: cookies.substring(0, 100),
+        });
+      }
+    }
     
     // Get downloads array for detailed logging
     const allDownloads = responseData.data?.downloads || responseData.downloads || [];

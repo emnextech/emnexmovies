@@ -75,6 +75,44 @@ async function ensureCookiesAreAssigned() {
 }
 
 /**
+ * Merge cookies from response with existing cookies
+ * Combines account and i18n_lang cookies properly
+ * @param {string} existingCookies - Existing cookie string
+ * @param {string} newCookies - New cookies from response
+ * @returns {string} Merged cookie string
+ */
+function mergeCookies(existingCookies, newCookies) {
+  if (!existingCookies && !newCookies) return null;
+  if (!existingCookies) return newCookies;
+  if (!newCookies) return existingCookies;
+
+  // Parse cookies into objects
+  const parseCookies = (cookieStr) => {
+    const cookies = {};
+    cookieStr.split(';').forEach(cookie => {
+      const trimmed = cookie.trim();
+      if (!trimmed) return;
+      const [name, ...valueParts] = trimmed.split('=');
+      if (name) {
+        cookies[name] = valueParts.join('='); // Handle values with = in them
+      }
+    });
+    return cookies;
+  };
+
+  const existing = parseCookies(existingCookies);
+  const newCookiesObj = parseCookies(newCookies);
+
+  // Merge: new cookies override existing ones, but keep all
+  const merged = { ...existing, ...newCookiesObj };
+
+  // Convert back to cookie string
+  return Object.entries(merged)
+    .map(([name, value]) => `${name}=${value}`)
+    .join('; ');
+}
+
+/**
  * Make a request to the Moviebox API with retry logic
  * @param {string} endpoint - API endpoint (relative path)
  * @param {Object} options - Request options
@@ -160,7 +198,7 @@ async function makeRequest(endpoint, options = {}) {
         // Also update global cookies if new ones are received
         if (response.headers['set-cookie']) {
           // Convert Set-Cookie array to cookie string format
-          const cookies = response.headers['set-cookie']
+          const newCookies = response.headers['set-cookie']
             .map(cookie => {
               // Extract cookie name and value (before first semicolon)
               const cookiePart = cookie.split(';')[0].trim();
@@ -168,14 +206,17 @@ async function makeRequest(endpoint, options = {}) {
             })
             .join('; ');
           
+          // Merge with existing cookies (important: don't lose account cookie if i18n_lang is added)
+          const mergedCookies = mergeCookies(globalCookies, newCookies);
+          
           // Update global cookies if we got new ones
-          if (cookies) {
-            globalCookies = cookies;
+          if (mergedCookies) {
+            globalCookies = mergedCookies;
             cookiesInitialized = true;
           }
           
-          // Attach cookies to response object for easy access
-          response.cookies = cookies;
+          // Attach merged cookies to response object for easy access
+          response.cookies = mergedCookies || globalCookies;
         } else if (globalCookies) {
           // If no new cookies but we have global cookies, use those
           response.cookies = globalCookies;
@@ -205,5 +246,6 @@ async function makeRequest(endpoint, options = {}) {
 module.exports = {
   makeRequest,
   ensureCookiesAreAssigned,
+  mergeCookies,
 };
 
