@@ -329,6 +329,61 @@ router.get('/movie/:subjectId', async (req, res) => {
 });
 
 /**
+ * Make download metadata request with retry logic for limited responses
+ * @param {string} endpoint - API endpoint
+ * @param {Object} options - Request options
+ * @param {number} maxRetries - Maximum retry attempts (default: 2)
+ * @returns {Promise} Axios response
+ */
+async function makeDownloadRequestWithRetry(endpoint, options, maxRetries = 2) {
+  const { makeRequest } = require('../utils/proxy');
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Add small random delay before each request to prevent rate limiting
+      if (attempt > 0) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000); // Exponential backoff, max 5s
+        console.log(`⏳ Retry attempt ${attempt}/${maxRetries} - waiting ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      } else {
+        // Small random delay on first request (0-1s) to prevent simultaneous requests
+        const randomDelay = Math.floor(Math.random() * 1000);
+        if (randomDelay > 0) {
+          await new Promise(resolve => setTimeout(resolve, randomDelay));
+        }
+      }
+      
+      const response = await makeRequest(endpoint, options);
+      const responseData = response.data || {};
+      const allDownloads = responseData.data?.downloads || responseData.downloads || [];
+      const isLimited = responseData.data?.limited === true;
+      
+      // If limited with empty downloads and we have retries left, retry after delay
+      if (isLimited && allDownloads.length === 0 && attempt < maxRetries) {
+        console.log(`⚠️ Limited response with empty downloads. Will retry... (attempt ${attempt + 1}/${maxRetries + 1})`);
+        continue; // Retry
+      }
+      
+      // Success or no more retries
+      if (attempt > 0) {
+        console.log(`✅ Request succeeded on attempt ${attempt + 1}`);
+      }
+      return response;
+    } catch (error) {
+      // If last attempt, throw error
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Retry on error with exponential backoff
+      const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+      console.log(`⚠️ Request failed. Retrying in ${delay}ms... (attempt ${attempt + 1}/${maxRetries + 1})`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
  * GET /wefeed-h5-bff/web/subject/download
  * Gets download URLs for a movie/TV series episode
  * Query params: subjectId, se, ep, detailPath
@@ -392,7 +447,7 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     console.log('Using headers:', JSON.stringify(headers, null, 2));
     console.log('Has cookies:', !!requestCookies);
 
-    const response = await makeRequest('wefeed-h5-bff/web/subject/download', {
+    const response = await makeDownloadRequestWithRetry('wefeed-h5-bff/web/subject/download', {
       method: 'GET',
       params: {
         subjectId,
@@ -400,7 +455,7 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
         ep,
       },
       headers,
-    });
+    }, 2); // Max 2 retries (3 total attempts)
 
     // Response should have downloads and captions arrays
     // Ensure the structure matches the API documentation
@@ -455,6 +510,10 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     // Check if content is limited and log it
     const isLimited = responseData.data?.limited === true;
     if (isLimited) {
+      const retryInfo = allDownloads.length === 0 
+        ? ' (Retries will be attempted automatically)' 
+        : ' (Downloads available despite limit)';
+      
       console.warn('⚠️ CONTENT IS LIMITED:', {
         limited: responseData.data.limited,
         freeNum: responseData.data.freeNum,
@@ -462,7 +521,7 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
         limitedCodePreview: responseData.data.limitedCode ? responseData.data.limitedCode.substring(0, 50) + '...' : 'none',
         hasResource: responseData.data.hasResource,
         downloadsCount: allDownloads.length,
-        message: `API is rate-limiting. ${responseData.data.freeNum > 0 ? `Free downloads remaining: ${responseData.data.freeNum}` : 'No free downloads remaining'}`,
+        message: `API is rate-limiting. ${responseData.data.freeNum > 0 ? `Free downloads remaining: ${responseData.data.freeNum}` : 'No free downloads remaining'}${retryInfo}`,
       });
     }
     
