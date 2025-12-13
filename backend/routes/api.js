@@ -452,6 +452,20 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     // Try multiple possible locations for downloads array
     const allDownloads = responseData.data?.downloads || responseData.downloads || [];
     
+    // Check if content is limited and log it
+    const isLimited = responseData.data?.limited === true;
+    if (isLimited) {
+      console.warn('⚠️ CONTENT IS LIMITED:', {
+        limited: responseData.data.limited,
+        freeNum: responseData.data.freeNum,
+        hasLimitedCode: !!responseData.data.limitedCode,
+        limitedCodePreview: responseData.data.limitedCode ? responseData.data.limitedCode.substring(0, 50) + '...' : 'none',
+        hasResource: responseData.data.hasResource,
+        downloadsCount: allDownloads.length,
+        message: `API is rate-limiting. ${responseData.data.freeNum > 0 ? `Free downloads remaining: ${responseData.data.freeNum}` : 'No free downloads remaining'}`,
+      });
+    }
+    
     // If downloads are empty, log all possible locations
     if (allDownloads.length === 0) {
       console.warn('⚠️ NO DOWNLOADS FOUND - Checking all possible locations:');

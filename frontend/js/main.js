@@ -805,8 +805,11 @@ function renderMovieDetails(movieData) {
     season = 0;
   }
   
-  // Load file sizes immediately
-  loadQualitySizes(subjectId, detailPath, qualitySelector, qualitySizeInfo, season, episode);
+  // Load file sizes after a delay to prevent rate limiting
+  // The delay helps avoid triggering API rate limits from too many rapid requests
+  setTimeout(() => {
+    loadQualitySizes(subjectId, detailPath, qualitySelector, qualitySizeInfo, season, episode);
+  }, 3000); // 3 second delay
 
   // Update file sizes when quality or season/episode changes
   qualitySelector.addEventListener('change', () => {
@@ -1104,6 +1107,14 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
       hasI18nLang: metadata.cookies ? metadata.cookies.includes('i18n_lang') : false,
     });
     
+    // Check if content is limited (rate-limited by API)
+    if (metadata.limited && (!metadata.downloads || metadata.downloads.length === 0)) {
+      const freeNumMsg = metadata.freeNum > 0 
+        ? `You have ${metadata.freeNum} free download${metadata.freeNum === 1 ? '' : 's'} remaining. ` 
+        : '';
+      throw new Error(`Download limit reached. ${freeNumMsg}Please try again later or wait for the limit to reset.`);
+    }
+    
     // Check hasResource flag - if false, no files are available
     if (!metadata.hasResource) {
       throw new Error('File not available (hasResource: false). This content may not be downloadable.');
@@ -1124,6 +1135,13 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
     });
 
     if (availableDownloads.length === 0) {
+      // Check if it's due to rate limiting
+      if (metadata.limited) {
+        const freeNumMsg = metadata.freeNum > 0 
+          ? `You have ${metadata.freeNum} free download${metadata.freeNum === 1 ? '' : 's'} remaining. ` 
+          : '';
+        throw new Error(`Download limit reached. ${freeNumMsg}Please try again later.`);
+      }
       throw new Error('No video files available. All download entries are missing or unavailable.');
     }
 
