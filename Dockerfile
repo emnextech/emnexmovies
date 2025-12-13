@@ -1,5 +1,5 @@
-# Use official Node.js runtime as base image
-FROM node:18-alpine
+# Use official Node.js runtime as base image - MUST be Node 20+ for undici compatibility
+FROM node:20-alpine
 
 # Set working directory
 WORKDIR /app
