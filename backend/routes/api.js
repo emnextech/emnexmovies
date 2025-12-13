@@ -343,10 +343,27 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
   try {
     let { subjectId, se = 0, ep = 0, detailPath } = req.query;
 
+    // Convert to numbers and enforce movie rules
+    const originalSe = se;
+    const originalEp = ep;
+    se = parseInt(se) || 0;
+    ep = parseInt(ep) || 0;
+    
     // Enforce: if episode is 0, season must be 0 (movies don't have seasons)
-    if (ep === 0 || parseInt(ep) === 0) {
+    if (ep === 0) {
       se = 0;
     }
+    
+    console.log('Normalized params:', { 
+      subjectId, 
+      se, 
+      ep, 
+      detailPath, 
+      originalSe, 
+      originalEp,
+      seChanged: originalSe !== se,
+      epChanged: originalEp !== ep,
+    });
 
     if (!subjectId) {
       return res.status(400).json({ error: 'subjectId query parameter is required' });
@@ -389,6 +406,29 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     // Ensure the structure matches the API documentation
     const responseData = response.data || {};
     
+    // CRITICAL: Log the actual API response to see why downloads are empty
+    console.log('=== FULL API RESPONSE DEBUG ===');
+    console.log('Response status:', response.status);
+    console.log('Response headers:', {
+      contentType: response.headers['content-type'],
+      setCookie: response.headers['set-cookie'] ? 'present' : 'none',
+    });
+    console.log('response.data type:', typeof responseData);
+    console.log('response.data structure:', {
+      hasData: !!responseData.data,
+      hasDownloads: !!responseData.downloads,
+      dataHasDownloads: !!responseData.data?.downloads,
+      dataKeys: responseData.data ? Object.keys(responseData.data) : [],
+      rootKeys: Object.keys(responseData),
+    });
+    // Log first 1000 chars of response to see structure without overwhelming logs
+    const responseDataString = JSON.stringify(responseData);
+    console.log('responseData preview (first 1000 chars):', responseDataString.substring(0, 1000));
+    if (responseDataString.length > 1000) {
+      console.log('responseData total length:', responseDataString.length, 'chars');
+    }
+    console.log('=== END API RESPONSE DEBUG ===');
+    
     // Extract cookies from response (required for actual file downloads)
     // MovieBox sets cookies like: account=...; i18n_lang=en
     // The response.cookies should already be merged (account + i18n_lang) from makeRequest
@@ -409,7 +449,28 @@ router.get('/wefeed-h5-bff/web/subject/download', async (req, res) => {
     }
     
     // Get downloads array for detailed logging
+    // Try multiple possible locations for downloads array
     const allDownloads = responseData.data?.downloads || responseData.downloads || [];
+    
+    // If downloads are empty, log all possible locations
+    if (allDownloads.length === 0) {
+      console.warn('⚠️ NO DOWNLOADS FOUND - Checking all possible locations:');
+      console.warn('  responseData.data?.downloads:', responseData.data?.downloads);
+      console.warn('  responseData.downloads:', responseData.downloads);
+      console.warn('  responseData.data keys:', responseData.data ? Object.keys(responseData.data) : 'no data');
+      console.warn('  responseData root keys:', Object.keys(responseData));
+      
+      // Check if there's a different structure (e.g., code/data pattern)
+      if (responseData.code !== undefined) {
+        console.warn('  Response has code field:', responseData.code);
+      }
+      if (responseData.message) {
+        console.warn('  Response message:', responseData.message);
+      }
+      if (responseData.data && typeof responseData.data === 'object') {
+        console.warn('  responseData.data full structure:', JSON.stringify(responseData.data).substring(0, 500));
+      }
+    }
     
     // Log response structure with detailed information about resources
     console.log('=== DOWNLOAD METADATA RESPONSE ===');
