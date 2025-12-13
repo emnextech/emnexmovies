@@ -6,7 +6,7 @@ You're seeing this error:
 ```
 sh: 1: cd: can't cd to backend
 ERROR: failed to build: failed to solve: process "sh -c cd backend && npm install" did not complete successfully
-```
+```k
 
 **This means Railway is still using `cd backend && npm install` in the Build Command.**
 
