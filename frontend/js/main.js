@@ -652,17 +652,18 @@ function renderMovieDetails(movieData) {
                     <div class="download-controls">
                       ${isTVSeries ? renderTVSeriesControls(seasons) : ''}
                       
-                      <div class="download-options">
-                        <div class="download-option-group">
-                          <label class="form-label" for="quality-selector">
-                            <i class="bi bi-hd"></i> Quality
-                          </label>
-                          <select id="quality-selector" class="form-select quality-selector">
-                            <!-- Options will be dynamically loaded -->
-                          </select>
-                          <div id="quality-size-info" class="quality-size-info"></div>
+                      <!-- Quality Buttons (horizontal) -->
+                      <div class="quality-selector-container">
+                        <label class="form-label">
+                          <i class="bi bi-hd"></i> Quality
+                        </label>
+                        <div id="quality-buttons" class="quality-buttons">
+                          <!-- Quality buttons will be dynamically loaded -->
                         </div>
-                        
+                        <div id="quality-size-info" class="quality-size-info"></div>
+                      </div>
+                      
+                      <div class="download-options">
                         <div class="download-option-group">
                           <label class="form-label" for="subtitle-selector">
                             <i class="bi bi-translate"></i> Subtitles
@@ -782,7 +783,7 @@ function renderMovieDetails(movieData) {
   } else {
     console.log('Download button found, setting up event listener...');
   }
-  const qualitySelector = document.getElementById('quality-selector');
+  const qualityButtonsContainer = document.getElementById('quality-buttons');
   const subtitleSelector = document.getElementById('subtitle-selector');
   const qualitySizeInfo = document.getElementById('quality-size-info');
   const urlParams = new URLSearchParams(window.location.search);
@@ -808,27 +809,16 @@ function renderMovieDetails(movieData) {
   // Load file sizes after a delay to prevent rate limiting
   // The delay helps avoid triggering API rate limits from too many rapid requests
   setTimeout(() => {
-    loadQualitySizes(subjectId, detailPath, qualitySelector, qualitySizeInfo, season, episode);
+    loadQualitySizes(subjectId, detailPath, qualityButtonsContainer, qualitySizeInfo, season, episode);
   }, 3000); // 3 second delay
-
-  // Update file sizes when quality or season/episode changes
-  qualitySelector.addEventListener('change', () => {
-    let season = isTVSeries ? (document.getElementById('season-selector')?.value || 0) : 0;
-    let episode = isTVSeries ? (document.getElementById('episode-selector')?.value || 0) : 0;
-    
-    // Enforce: if episode is 0, season must be 0 (movies don't have seasons)
-    if (episode === 0 || parseInt(episode) === 0) {
-      season = 0;
-    }
-    
-    loadQualitySizes(subjectId, detailPath, qualitySelector, qualitySizeInfo, season, episode);
-  });
 
   if (isTVSeries) {
     const seasonSelector = document.getElementById('season-selector');
     const episodeSelector = document.getElementById('episode-selector');
     if (seasonSelector) {
       seasonSelector.addEventListener('change', () => {
+        // Preserve selected quality when season changes
+        const selectedQuality = qualityButtonsContainer?.querySelector('.quality-btn.active')?.dataset.quality || null;
         let season = seasonSelector.value || 0;
         let episode = episodeSelector.value || 0;
         
@@ -837,11 +827,13 @@ function renderMovieDetails(movieData) {
           season = 0;
         }
         
-        loadQualitySizes(subjectId, detailPath, qualitySelector, qualitySizeInfo, season, episode);
+        loadQualitySizes(subjectId, detailPath, qualityButtonsContainer, qualitySizeInfo, season, episode, selectedQuality);
       });
     }
     if (episodeSelector) {
       episodeSelector.addEventListener('change', () => {
+        // Preserve selected quality when episode changes
+        const selectedQuality = qualityButtonsContainer?.querySelector('.quality-btn.active')?.dataset.quality || null;
         let season = seasonSelector?.value || 0;
         let episode = episodeSelector.value || 0;
         
@@ -850,7 +842,7 @@ function renderMovieDetails(movieData) {
           season = 0;
         }
         
-        loadQualitySizes(subjectId, detailPath, qualitySelector, qualitySizeInfo, season, episode);
+        loadQualitySizes(subjectId, detailPath, qualityButtonsContainer, qualitySizeInfo, season, episode, selectedQuality);
       });
     }
   }
@@ -858,7 +850,9 @@ function renderMovieDetails(movieData) {
   downloadBtn.addEventListener('click', async () => {
     console.log('=== DOWNLOAD BUTTON CLICKED ===');
     
-    const quality = qualitySelector.value;
+    // Get selected quality from active button
+    const activeQualityBtn = qualityButtonsContainer?.querySelector('.quality-btn.active');
+    const quality = activeQualityBtn?.dataset.quality || '';
     const subtitleLang = subtitleSelector.value === 'None' ? '' : subtitleSelector.value;
     // For movies: se=0, ep=0 (default)
     // For TV series: use selected season/episode
@@ -878,66 +872,38 @@ function renderMovieDetails(movieData) {
 /**
  * Load and display file sizes for quality options
  */
-async function loadQualitySizes(subjectId, detailPath, qualitySelector, sizeInfoElement, season = 0, episode = 0) {
-  if (!qualitySelector) return;
+async function loadQualitySizes(subjectId, detailPath, qualityButtonsContainer, sizeInfoElement, season = 0, episode = 0, preserveQuality = null) {
+  if (!qualityButtonsContainer) return;
 
   try {
-    // Show loading state in selector
-    qualitySelector.innerHTML = '<option>Loading qualities...</option>';
-    qualitySelector.disabled = true;
+    // Show loading state
+    qualityButtonsContainer.innerHTML = '<div class="quality-loading">Loading qualities...</div>';
     if (sizeInfoElement) sizeInfoElement.textContent = '';
 
     const metadata = await api.getDownloadMetadata(subjectId, detailPath, season, episode);
     const downloads = metadata.downloads || [];
 
     // Clear loading state
-    qualitySelector.innerHTML = '';
-    qualitySelector.disabled = false;
+    qualityButtonsContainer.innerHTML = '';
 
     if (downloads.length === 0) {
-      qualitySelector.innerHTML = '<option value="">No links found</option>';
+      qualityButtonsContainer.innerHTML = '<div class="quality-error">No links found</div>';
       return;
     }
 
     // Sort downloads by resolution descending
     downloads.sort((a, b) => (b.resolution || 0) - (a.resolution || 0));
 
-    // Add "Best Available" option
-    const bestOption = document.createElement('option');
-    bestOption.value = 'BEST';
-    bestOption.textContent = 'Best Available';
-    qualitySelector.appendChild(bestOption);
-
-    // Add options for each available quality
-    downloads.forEach(download => {
-      const option = document.createElement('option');
-      const resolution = download.resolution || 0;
-      const size = download.size ? parseInt(download.size, 10) : 0;
-      
-      if (resolution > 0) {
-        option.value = `${resolution}P`;
-        let text = `${resolution}P`;
-        if (size > 0) {
-          text += ` (${ui.formatFileSize(size)})`;
-        }
-        option.textContent = text;
-        qualitySelector.appendChild(option);
-      }
-    });
+    // Store downloads for size info updates
+    qualityButtonsContainer.dataset.downloads = JSON.stringify(downloads);
 
     // Function to update size info based on selection
-    const updateSizeInfo = () => {
+    const updateSizeInfo = (selectedQuality) => {
       if (!sizeInfoElement) return;
 
-      const selectedQuality = qualitySelector.value;
-      let selectedFile = null;
-
-      if (selectedQuality === 'BEST') {
-        selectedFile = downloads[0]; // Highest resolution since we sorted
-      } else {
-        const qualityNum = parseInt(selectedQuality.replace('P', '')) || 0;
-        selectedFile = downloads.find(f => f.resolution === qualityNum);
-      }
+      const downloadsData = JSON.parse(qualityButtonsContainer.dataset.downloads || '[]');
+      const qualityNum = parseInt(selectedQuality.replace('P', '')) || 0;
+      const selectedFile = downloadsData.find(f => f.resolution === qualityNum);
 
       if (selectedFile && selectedFile.size) {
         const size = parseInt(selectedFile.size, 10);
@@ -952,17 +918,59 @@ async function loadQualitySizes(subjectId, detailPath, qualitySelector, sizeInfo
       }
     };
 
-    // Update size info initially and on change
-    updateSizeInfo();
-    qualitySelector.removeEventListener('change', updateSizeInfo); // Prevent multiple listeners
-    qualitySelector.addEventListener('change', updateSizeInfo);
+    // Add buttons for each available quality
+    downloads.forEach(download => {
+      const resolution = download.resolution || 0;
+      const size = download.size ? parseInt(download.size, 10) : 0;
+      
+      if (resolution > 0) {
+        const qualityValue = `${resolution}P`;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'quality-btn';
+        button.dataset.quality = qualityValue;
+        
+        let text = `${resolution}P`;
+        if (size > 0) {
+          text += ` (${ui.formatFileSize(size)})`;
+        }
+        button.textContent = text;
+        
+        // Set as active if this is the preserved quality
+        if (preserveQuality === qualityValue) {
+          button.classList.add('active');
+          updateSizeInfo(qualityValue);
+        }
+        
+        // Add click handler
+        button.addEventListener('click', () => {
+          // Remove active class from all buttons
+          qualityButtonsContainer.querySelectorAll('.quality-btn').forEach(btn => {
+            btn.classList.remove('active');
+          });
+          // Add active class to clicked button
+          button.classList.add('active');
+          // Update size info
+          updateSizeInfo(qualityValue);
+        });
+        
+        qualityButtonsContainer.appendChild(button);
+      }
+    });
 
+    // If no quality was preserved and we have buttons, select the first one (highest quality)
+    if (!preserveQuality && qualityButtonsContainer.children.length > 0) {
+      const firstButton = qualityButtonsContainer.querySelector('.quality-btn');
+      if (firstButton) {
+        firstButton.classList.add('active');
+        updateSizeInfo(firstButton.dataset.quality);
+      }
+    }
 
   } catch (error) {
     console.error('Could not load file qualities:', error);
-    if (qualitySelector) {
-      qualitySelector.innerHTML = '<option value="">Error loading</option>';
-      qualitySelector.disabled = true;
+    if (qualityButtonsContainer) {
+      qualityButtonsContainer.innerHTML = '<div class="quality-error">Error loading qualities</div>';
     }
     if (sizeInfoElement) sizeInfoElement.textContent = 'Could not load qualities.';
   }
@@ -1147,12 +1155,9 @@ async function handleBrowserDownload(subjectId, detailPath, quality, subtitleLan
 
     // Select quality - use filtered available downloads
     let selectedFile = null;
-    if (quality === 'BEST') {
-      // Sort by resolution descending and take highest
+    if (!quality || quality === '') {
+      // If no quality selected, use highest available
       selectedFile = [...availableDownloads].sort((a, b) => (b.resolution || 0) - (a.resolution || 0))[0];
-    } else if (quality === 'WORST') {
-      // Sort by resolution ascending and take lowest
-      selectedFile = [...availableDownloads].sort((a, b) => (a.resolution || 0) - (b.resolution || 0))[0];
     } else {
       // Match quality string (e.g., "1080P" -> 1080)
       const qualityNum = parseInt(quality.replace('P', '')) || 0;
