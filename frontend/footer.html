@@ -1,0 +1,19 @@
+<!-- Footer -->
+<footer class="bg-dark-surface text-center py-4 mt-5">
+    <div class="container">
+        <p class="text-muted mb-2">
+            Disclaimer: We do not store any files on our server. All contents are provided by non-affiliated third parties. We just index those links which are already available in internet.
+        </p>
+        <p class="mb-0" style="color: var(--text-secondary);">&copy; <span id="copyright-year"></span> Emnexmovies. All rights reserved.</p>
+    </div>
+</footer>
+<!-- Set copyright year dynamically -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const yearElement = document.getElementById('copyright-year');
+        if (yearElement) {
+            yearElement.textContent = new Date().getFullYear();
+        }
+    });
+</script>
+

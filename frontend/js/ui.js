@@ -3,90 +3,60 @@
  */
 
 /**
- * Show loading indicator with shimmer effect
+ * Show loading indicator with 4-dot animation
  * @param {HTMLElement} container - Container element
- * @param {string} type - Type of loading (grid, detail, banner)
+ * @param {string} type - Type of loading (grid, detail, banner, home)
  */
 function showLoading(container, type = 'grid') {
-  let shimmerHTML = '';
+  let loadingHTML = '';
+  
+  const dotLoader = `
+    <div class="loading-dots-container">
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+      <div class="loading-dot"></div>
+    </div>
+  `;
   
   if (type === 'grid') {
-    // Shimmer loading for movie grid
-    shimmerHTML = `
-      <div class="shimmer-loading-grid">
-        ${Array(12).fill(0).map(() => `
-          <div class="shimmer-card">
-            <div class="shimmer-image"></div>
-            <div class="shimmer-content">
-              <div class="shimmer-line shimmer-title"></div>
-              <div class="shimmer-line shimmer-meta"></div>
-            </div>
-          </div>
-        `).join('')}
+    // 4-dot loading for movie grid
+    loadingHTML = `
+      <div class="loading-movie-grid">
+        ${dotLoader}
       </div>
     `;
-  } else if (type === 'home' || type === 'banner') {
-    // Shimmer loading for home page - shows both banner and movie cards
-    shimmerHTML = `
-      <div class="shimmer-loading-home">
-        <!-- Banner shimmer -->
-        <div class="shimmer-loading-banner mb-5">
-          <div class="shimmer-banner-slide"></div>
-        </div>
-        <!-- Movie cards shimmer -->
-        <div class="shimmer-loading-grid">
-          ${Array(12).fill(0).map(() => `
-            <div class="shimmer-card">
-              <div class="shimmer-image"></div>
-              <div class="shimmer-content">
-                <div class="shimmer-line shimmer-title"></div>
-                <div class="shimmer-line shimmer-meta"></div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
+  } else if (type === 'home') {
+    // 4-dot loading for home page
+    loadingHTML = `
+      <div class="loading-movie-grid">
+        ${dotLoader}
       </div>
     `;
   } else if (type === 'detail') {
-    // Shimmer loading for movie detail page
-    shimmerHTML = `
-      <div class="shimmer-loading-detail">
-        <div class="shimmer-detail-hero">
-          <div class="shimmer-detail-poster"></div>
-          <div class="shimmer-detail-content">
-            <div class="shimmer-line shimmer-detail-title"></div>
-            <div class="shimmer-line shimmer-detail-line"></div>
-            <div class="shimmer-line shimmer-detail-line"></div>
-            <div class="shimmer-line shimmer-detail-line short"></div>
-          </div>
-        </div>
+    // 4-dot loading for movie detail page
+    loadingHTML = `
+      <div class="loading-movie-detail">
+        ${dotLoader}
       </div>
     `;
   } else if (type === 'banner') {
-    // Shimmer loading for banner section
-    shimmerHTML = `
-      <div class="shimmer-loading-banner">
-        <div class="shimmer-banner-slide"></div>
+    // 4-dot loading for banner section
+    loadingHTML = `
+      <div class="loading-banner">
+        ${dotLoader}
       </div>
     `;
   } else {
-    // Default shimmer grid
-    shimmerHTML = `
-      <div class="shimmer-loading-grid">
-        ${Array(12).fill(0).map(() => `
-          <div class="shimmer-card">
-            <div class="shimmer-image"></div>
-            <div class="shimmer-content">
-              <div class="shimmer-line shimmer-title"></div>
-              <div class="shimmer-line shimmer-meta"></div>
-            </div>
-          </div>
-        `).join('')}
+    // Default 4-dot loading
+    loadingHTML = `
+      <div class="loading-dots">
+        ${dotLoader}
       </div>
     `;
   }
   
-  container.innerHTML = shimmerHTML;
+  container.innerHTML = loadingHTML;
 }
 
 /**
@@ -205,7 +175,7 @@ function formatDate(date) {
  * @returns {string} Optimized image URL
  */
 function optimizeImageUrl(url, width = 300, quality = 80) {
-  if (!url || url === '/assets/images/placeholder.jpg') {
+  if (!url) {
     return url;
   }
   
@@ -239,7 +209,7 @@ function hasEnglishAudio(item) {
  */
 function createMovieCard(item) {
   // Handle different poster/cover structures
-  let poster = '/assets/images/placeholder.jpg';
+  let poster = null;
   if (item.cover && typeof item.cover === 'object' && item.cover.url) {
     poster = item.cover.url;
   } else if (item.cover && typeof item.cover === 'string') {
@@ -248,14 +218,8 @@ function createMovieCard(item) {
     poster = item.poster;
   }
   
-  // Optimize image URL for thumbnails (300px width, 80% quality)
-  const optimizedPoster = optimizeImageUrl(poster, 300, 80);
-  
-  // Use blurHash or thumbnail if available for placeholder
-  const placeholder = item.cover?.thumbnail || item.cover?.blurHash || '';
-  const blurHashStyle = placeholder && placeholder.startsWith('e') 
-    ? `style="background: #2b2e39; background-image: url('data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="100%" height="100%" fill="#2b2e39"/></svg>`)}');"` 
-    : '';
+  // Optimize image URL for thumbnails (200px width, 70% quality for better performance)
+  const optimizedPoster = poster ? optimizeImageUrl(poster, 200, 70) : null;
   
   const title = item.title || item.name || 'Unknown';
   const year = item.releaseDate ? new Date(item.releaseDate).getFullYear() : item.year || '';
@@ -275,12 +239,12 @@ function createMovieCard(item) {
     <div class="card movie-card" data-subject-id="${subjectId}" data-detail-path="${detailPath}">
       <div class="position-relative movie-card-image-wrapper">
         <img 
-          src="${optimizedPoster}" 
+          ${optimizedPoster ? `src="${optimizedPoster}"` : ''}
           class="card-img-top movie-card-image" 
           alt="${title}" 
           loading="lazy" 
           decoding="async"
-          onerror="if (!this.dataset.failed) { this.dataset.failed = 'true'; if (this.src !== '/assets/images/placeholder.jpg') { this.src = '/assets/images/placeholder.jpg'; this.classList.add('loaded'); this.parentElement.classList.add('image-loaded'); } else { this.style.display = 'none'; } }"
+          onerror="if (!this.dataset.failed) { this.dataset.failed = 'true'; this.style.display = 'none'; this.parentElement.style.minHeight = '200px'; }"
           onload="this.classList.add('loaded'); this.parentElement.classList.add('image-loaded');"
         >
         ${imdbDisplay ? `<span class="imdb-rating-badge">
@@ -330,14 +294,24 @@ function renderMovieGrid(container, items) {
   
   container.innerHTML = items.map(item => createMovieCard(item)).join('');
   
-  // Add click handlers
-  container.querySelectorAll('.movie-card').forEach(card => {
+  // Add click handlers and animations
+  container.querySelectorAll('.movie-card').forEach((card, index) => {
+    // Add animation class with staggered delay
+    card.classList.add('fade-in-up');
+    
     card.addEventListener('click', () => {
       const subjectId = card.dataset.subjectId;
       const detailPath = card.dataset.detailPath;
       window.location.href = `movie-detail.html?id=${subjectId}&path=${encodeURIComponent(detailPath)}`;
     });
   });
+  
+  // Setup lazy loading for images
+  setTimeout(() => {
+    if (typeof setupLazyLoading === 'function') {
+      setupLazyLoading();
+    }
+  }, 50);
 }
 
 /**
@@ -359,16 +333,21 @@ function debounce(func, wait) {
 }
 
 /**
- * Create skeleton loaders
- * @param {number} count - Number of skeletons
- * @returns {string} HTML string
+ * Create loading indicator (replaces skeleton loaders)
+ * @param {number} count - Not used, kept for compatibility
+ * @returns {string} HTML string with 4-dot loader
  */
 function createSkeletons(count = 6) {
-  return Array(count).fill(0).map(() => `
-    <div class="card skeleton skeleton-card">
-      <div class="card-body"></div>
+  return `
+    <div class="loading-dots">
+      <div class="loading-dots-container">
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+        <div class="loading-dot"></div>
+      </div>
     </div>
-  `).join('');
+  `;
 }
 
 // Export for global use

@@ -24,6 +24,8 @@ html {
   scroll-behavior: smooth;
   overflow-x: hidden;
   height: 100%;
+  /* Optimize scrolling performance */
+  -webkit-overflow-scrolling: touch;
 }
 
 body {
@@ -38,6 +40,10 @@ body {
   padding: 0;
   display: flex;
   flex-direction: column;
+  /* Optimize rendering performance */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* Main Content Wrapper - ensures content fills space for sticky footer */
@@ -313,15 +319,33 @@ body > .error-page {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
+  /* Reduced shadow for better performance */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .card:hover {
   border-color: rgba(255, 255, 255, 0.3);
+  /* Minimal shadow on hover */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 /* Ensure no green colors on movie cards */
+.movie-card {
+  /* GPU acceleration for smooth scrolling */
+  will-change: transform;
+  transform: translateZ(0);
+  /* Reduced shadow */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.5s ease-out;
+  cursor: pointer;
+  /* Start hidden for viewport animation */
+  opacity: 0;
+}
+
 .movie-card:hover {
   border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-2px) translateZ(0);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
 }
 
 .card-img-top {
@@ -333,10 +357,22 @@ body > .error-page {
   position: relative;
   overflow: hidden;
   background-color: var(--dark-surface);
+  min-height: 200px;
   height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Empty image wrapper - maintains layout when image fails or is hidden */
+.movie-card-image-wrapper img[style*="display: none"],
+.movie-card-image-wrapper img:not([src]) {
+  display: none !important;
+}
+
+/* Ensure wrapper maintains height even when image is hidden */
+.movie-card-image-wrapper[style*="min-height"] {
+  min-height: 200px;
 }
 
 .movie-card-image-wrapper::before {
@@ -347,9 +383,21 @@ body > .error-page {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  opacity: 1;
+  opacity: 0;
   background-color: var(--dark-surface);
   position: relative;
+  z-index: 3;
+  transition: opacity 0.3s ease-in-out;
+  /* Optimize image rendering */
+  image-rendering: optimizeSpeed;
+  image-rendering: -webkit-optimize-contrast;
+  /* GPU acceleration */
+  transform: translateZ(0);
+  will-change: opacity;
+}
+
+.movie-card-image.loaded {
+  opacity: 1;
   z-index: 3;
 }
 
@@ -358,23 +406,8 @@ body > .error-page {
   z-index: 3;
 }
 
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
 
-/* Banner image optimization */
-.banner-slide {
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-  min-height: 500px;
-  position: relative;
-}
+/* Banner image optimization - this is a duplicate, main definition is below */
 
 /* Detail page poster optimization */
 .movie-detail-poster {
@@ -510,7 +543,7 @@ body > .error-page {
   font-weight: 600;
   font-size: 0.75rem;
   z-index: 3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4) !important;
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
@@ -602,6 +635,11 @@ body > .error-page {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 1rem;
   padding: 1rem 0;
+  /* CSS containment for better scroll performance */
+  contain: layout style paint;
+  /* GPU acceleration */
+  will-change: contents;
+  transform: translateZ(0);
 }
 
 @media (min-width: 1400px) {
@@ -610,11 +648,7 @@ body > .error-page {
   }
 }
 
-.movie-card {
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
+/* Movie card styles are already defined above with GPU acceleration and reduced shadows */
 
 .movie-card .card-img-top {
   height: 200px;
@@ -671,283 +705,192 @@ body > .error-page {
   color: var(--green-primary);
 }
 
-/* Skeleton Loader */
-.skeleton {
-  background: linear-gradient(90deg, var(--dark-surface) 25%, var(--dark-surface-hover) 50%, var(--dark-surface) 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
-}
-
-@keyframes loading {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-.skeleton-card {
-  height: 400px;
-  border-radius: 8px;
-}
-
-/* Shimmer Loading Effects */
-@keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
-}
-
-.shimmer-base {
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
-}
-
-/* Shimmer Grid Loading */
-.shimmer-loading-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 1rem;
-  padding: 1rem 0;
-}
-
-@media (min-width: 1400px) {
-  .shimmer-loading-grid {
-    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  }
-}
-
-.shimmer-card {
-  background-color: var(--dark-surface);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.shimmer-image {
-  width: 100%;
-  height: 200px;
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
-}
-
-.shimmer-content {
-  padding: 0.75rem;
+/* 4-Dot Loading Animation */
+.loading-dots {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem;
+  min-height: 200px;
+}
+
+.loading-dots-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   gap: 0.5rem;
 }
 
-.shimmer-line {
+.loading-dot {
+  width: 12px;
   height: 12px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
+  border-radius: 50%;
+  background-color: var(--green-primary);
+  animation: dot-bounce 1.4s infinite ease-in-out both;
 }
 
-.shimmer-title {
-  width: 80%;
-  height: 16px;
+.loading-dot:nth-child(1) {
+  animation-delay: -0.32s;
 }
 
-.shimmer-meta {
-  width: 60%;
-  height: 12px;
+.loading-dot:nth-child(2) {
+  animation-delay: -0.16s;
 }
 
-/* Shimmer Detail Loading */
-.shimmer-loading-detail {
-  padding: 2rem 0;
+.loading-dot:nth-child(3) {
+  animation-delay: 0s;
 }
 
-.shimmer-detail-hero {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 2rem;
-  align-items: start;
+.loading-dot:nth-child(4) {
+  animation-delay: 0.16s;
 }
 
-.shimmer-detail-poster {
-  width: 100%;
-  height: 450px;
-  border-radius: 12px;
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
+@keyframes dot-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
 }
 
-.shimmer-detail-content {
+/* Loading indicator for movie cards grid */
+.loading-movie-grid {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding-top: 1rem;
-}
-
-.shimmer-detail-title {
-  width: 70%;
-  height: 32px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
-}
-
-.shimmer-detail-line {
-  width: 100%;
-  height: 16px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
-}
-
-.shimmer-detail-line.short {
-  width: 60%;
-}
-
-/* Shimmer Banner Loading */
-.shimmer-loading-banner {
-  width: 100%;
-  margin-bottom: 3rem;
-}
-
-.shimmer-banner-slide {
-  width: 100%;
-  height: 500px;
-  border-radius: 12px;
-  background: linear-gradient(
-    90deg,
-    var(--dark-surface) 0%,
-    var(--dark-surface-hover) 20%,
-    var(--dark-surface) 40%,
-    var(--dark-surface) 100%
-  );
-  background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
-}
-
-/* Shimmer Home Loading (Banner + Grid) */
-.shimmer-loading-home {
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  min-height: 400px;
+  grid-column: 1 / -1; /* Span all columns in the grid */
   width: 100%;
 }
 
-.shimmer-loading-home .shimmer-loading-banner {
-  margin-bottom: 3rem;
-  margin-top: -76px;
-  padding-top: 76px;
-  position: relative;
-  z-index: 1;
+/* Loading indicator for movie detail */
+.loading-movie-detail {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  min-height: 600px;
 }
 
-.shimmer-loading-home .shimmer-loading-grid {
-  margin-top: 0;
-  position: relative;
-  z-index: 2;
+/* Loading indicator for banner */
+.loading-banner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 2rem;
+  min-height: 500px;
 }
 
-/* Mobile adjustments for shimmer home */
-@media (max-width: 768px) {
-  .shimmer-loading-home .shimmer-loading-banner {
-    margin-top: -70px;
-    padding-top: 70px;
+/* Card Entrance Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) translateZ(0);
   }
-}
-
-@media (max-width: 576px) {
-  .shimmer-loading-home .shimmer-loading-banner {
-    margin-top: -64px;
-    padding-top: 64px;
-  }
-}
-
-/* Mobile Responsive Shimmer */
-@media (max-width: 768px) {
-  .shimmer-loading-grid {
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 0.875rem;
-  }
-
-  .shimmer-image {
-    height: 180px;
-  }
-
-  .shimmer-detail-hero {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .shimmer-detail-poster {
-    height: 300px;
-    max-width: 250px;
-    margin: 0 auto;
-  }
-
-  .shimmer-banner-slide {
-    height: 400px;
+  to {
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
   }
 }
 
-@media (max-width: 576px) {
-  .shimmer-loading-grid {
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-    gap: 0.75rem;
+@keyframes fadeIn {
+  from {
+    opacity: 0;
   }
+  to {
+    opacity: 1;
+  }
+}
 
-  .shimmer-image {
-    height: 160px;
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) translateZ(0);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateZ(0);
+  }
+}
 
-  .shimmer-detail-poster {
-    height: 250px;
-    max-width: 200px;
-  }
+/* Viewport-based animations - elements start hidden and animate when in viewport */
+.viewport-fade-in {
+  opacity: 0;
+  transition: opacity 0.6s ease-out;
+}
 
-  .shimmer-banner-slide {
-    height: 350px;
-  }
+.viewport-fade-in.visible {
+  opacity: 1;
+}
+
+.viewport-slide-up {
+  opacity: 0;
+  transform: translateY(30px) translateZ(0);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.viewport-slide-up.visible {
+  opacity: 1;
+  transform: translateY(0) translateZ(0);
+}
+
+/* Stagger animation for sections */
+.movie-section {
+  opacity: 0;
+  transform: translateY(20px) translateZ(0);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.movie-section.visible {
+  opacity: 1;
+  transform: translateY(0) translateZ(0);
+}
+
+/* Banner section animation */
+.banner-section {
+  opacity: 0;
+  transform: translateY(20px) translateZ(0);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+
+.banner-section.visible {
+  opacity: 1;
+  transform: translateY(0) translateZ(0);
+}
+
+/* Movie cards - viewport-based with stagger (opacity handled in main definition above) */
+.movie-card:not(.visible) {
+  transform: translateY(20px) translateZ(0);
+}
+
+.movie-card.visible {
+  transform: translateY(0) translateZ(0);
+}
+
+/* Stagger delays for cards within a grid */
+.movie-grid .movie-card:nth-child(1) { transition-delay: 0.05s; }
+.movie-grid .movie-card:nth-child(2) { transition-delay: 0.10s; }
+.movie-grid .movie-card:nth-child(3) { transition-delay: 0.15s; }
+.movie-grid .movie-card:nth-child(4) { transition-delay: 0.20s; }
+.movie-grid .movie-card:nth-child(5) { transition-delay: 0.25s; }
+.movie-grid .movie-card:nth-child(6) { transition-delay: 0.30s; }
+.movie-grid .movie-card:nth-child(7) { transition-delay: 0.35s; }
+.movie-grid .movie-card:nth-child(8) { transition-delay: 0.40s; }
+.movie-grid .movie-card:nth-child(9) { transition-delay: 0.45s; }
+.movie-grid .movie-card:nth-child(10) { transition-delay: 0.50s; }
+.movie-grid .movie-card:nth-child(11) { transition-delay: 0.55s; }
+.movie-grid .movie-card:nth-child(12) { transition-delay: 0.60s; }
+.movie-grid .movie-card:nth-child(n+13) { transition-delay: 0.65s; }
+
+/* Legacy fade-in-up for backwards compatibility */
+.fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+  opacity: 0;
 }
 
 /* Toast Notifications */
@@ -1082,7 +1025,7 @@ body > .error-page {
   border-radius: 12px;
   padding: 1.25rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   max-height: 400px;
   overflow-y: auto;
 }
@@ -1310,7 +1253,7 @@ body > .error-page {
 
 .movie-detail-poster {
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 5px 15px rgba(0, 255, 136, 0.2);
   width: 100%;
   height: auto;
   display: block;
@@ -1368,7 +1311,7 @@ body > .error-page {
   border: 1px solid rgba(255, 255, 255, 0.1);
   max-width: 480px;
   width: 100%;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   align-self: flex-start;
 }
 
@@ -1565,7 +1508,7 @@ body > .error-page {
 
 .download-btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 3px 10px rgba(0, 255, 136, 0.2);
 }
 
 .download-btn:active:not(:disabled) {
@@ -1644,7 +1587,7 @@ body > .error-page {
   overflow: hidden;
   margin-bottom: 0.75rem;
   background-color: var(--dark-surface);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1687,7 +1630,7 @@ body > .error-page {
   border-radius: 12px;
   overflow: hidden;
   background-color: var(--dark-surface);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 .trailer-video {
@@ -1782,7 +1725,7 @@ body > .error-page {
   overflow-y: auto;
   z-index: 1050;
   margin-top: 2px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
 .autocomplete-item {
@@ -1908,7 +1851,8 @@ body > .error-page {
 }
 
 .banner-slide {
-  height: 500px;
+  height: 100vh;
+  min-height: 100vh;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -2247,8 +2191,8 @@ body > .error-page {
   }
 
   .banner-slide {
-    height: 400px;
-    min-height: 400px;
+    height: 100vh;
+    min-height: 100vh;
   }
 
   .banner-overlay {
@@ -2546,8 +2490,8 @@ body > .error-page {
   }
 
   .banner-slide {
-    height: 350px;
-    min-height: 350px;
+    height: 100vh;
+    min-height: 100vh;
   }
 
   .banner-overlay {

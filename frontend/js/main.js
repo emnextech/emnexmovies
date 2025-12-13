@@ -104,11 +104,8 @@ async function initHomePage() {
       return;
     }
 
-    // Render each section (including BANNER as hero section below navbar)
-    operatingList.forEach((section, index) => {
-      console.log(`Rendering section ${index}:`, section.type);
-      renderHomeSection(section, mainContainer, index);
-    });
+    // Render sections progressively for better UX
+    renderSectionsProgressively(operatingList, mainContainer);
   } catch (error) {
     console.error('Error loading home content:', error);
     console.error('Error stack:', error.stack);
@@ -171,10 +168,20 @@ function renderHomeSection(section, container, index) {
       }
     }
     
+    // Trigger viewport animations setup for newly added content
+    setTimeout(() => {
+      if (typeof setupViewportAnimations === 'function') {
+        setupViewportAnimations();
+      }
+    }, 50);
+    
     // Add click handlers for movie cards in this section
     const sectionElement = container.lastElementChild;
     if (sectionElement) {
-      sectionElement.querySelectorAll('.movie-card').forEach(card => {
+      sectionElement.querySelectorAll('.movie-card').forEach((card, index) => {
+        // Add animation class with staggered delay
+        card.classList.add('fade-in-up');
+        
         card.addEventListener('click', () => {
           const subjectId = card.dataset.subjectId;
           const detailPath = card.dataset.detailPath;
@@ -183,6 +190,41 @@ function renderHomeSection(section, container, index) {
           }
         });
       });
+      
+      // Setup lazy loading for newly added images
+      setTimeout(() => {
+        if (typeof setupLazyLoading === 'function') {
+          setupLazyLoading();
+        }
+      }, 50);
+    }
+  }
+}
+
+/**
+ * Render sections progressively for better UX
+ * @param {Array} sections - Array of section data
+ * @param {HTMLElement} container - Container element
+ */
+async function renderSectionsProgressively(sections, container) {
+  // Render banner first (most important)
+  const bannerSection = sections.find(s => s.type === 'BANNER');
+  if (bannerSection) {
+    renderHomeSection(bannerSection, container, 0);
+    // Small delay to let banner render first
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  // Render other sections with small delays for progressive loading
+  const otherSections = sections.filter(s => s.type !== 'BANNER');
+  for (let i = 0; i < otherSections.length; i++) {
+    const section = otherSections[i];
+    renderHomeSection(section, container, i + 1);
+    
+    // Add small delay between sections for progressive rendering
+    // But don't delay too much to keep it fast
+    if (i < otherSections.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 50));
     }
   }
 }
@@ -202,11 +244,19 @@ function renderBannerSection(title, items) {
   ).join('');
 
   const slides = items.map((item, index) => {
-    let image = item.image?.url || item.subject?.cover?.url || '/assets/images/placeholder.jpg';
-    // Optimize banner images (use larger size for banners, but still compress)
-    if (image.includes('pbcdnw.aoneroom.com')) {
+    let image = item.image?.url || item.subject?.cover?.url;
+    let optimizedImage = image;
+    
+    // Optimize banner images - preload first, lazy load others
+    if (image && image.includes('pbcdnw.aoneroom.com')) {
       const separator = image.includes('?') ? '&' : '?';
-      image = `${image}${separator}x-oss-process=image/resize,w_1200,q_85`;
+      if (index === 0) {
+        // First slide: high quality, immediate load with fetchpriority
+        optimizedImage = `${image}${separator}x-oss-process=image/resize,w_1920,q_85`;
+      } else {
+        // Other slides: lower quality initially, will upgrade when active
+        optimizedImage = `${image}${separator}x-oss-process=image/resize,w_1920,q_75`;
+      }
     }
     
     const subjectTitle = item.subject?.title || item.title || 'Unknown';
@@ -221,9 +271,16 @@ function renderBannerSection(title, items) {
       }
     }
     
+    // Use data-bg-src for lazy loading non-active slides
+    const bgAttr = index === 0 && optimizedImage
+      ? `style="background-image: url('${optimizedImage}');"` 
+      : optimizedImage 
+        ? `data-bg-src="${optimizedImage}" style="background-color: var(--dark-surface);"` 
+        : `style="background-color: var(--dark-surface);"`;
+    
     return `
-      <div class="carousel-item ${index === 0 ? 'active' : ''}">
-        <div class="banner-slide" style="background-image: url('${image}');">
+      <div class="carousel-item ${index === 0 ? 'active' : ''}" data-slide-index="${index}">
+        <div class="banner-slide" ${bgAttr}>
           <div class="banner-overlay">
             <div class="container">
               <div class="banner-content">
@@ -280,12 +337,15 @@ function renderMovieSection(title, subjects) {
     return title.includes('[english]') || corner.includes('english');
   };
   
-  const cards = subjects.map(subject => {
-    let poster = subject.cover?.url || subject.poster || '/assets/images/placeholder.jpg';
-    // Optimize image URL for thumbnails
-    if (poster.includes('pbcdnw.aoneroom.com')) {
-      const separator = poster.includes('?') ? '&' : '?';
-      poster = `${poster}${separator}x-oss-process=image/resize,w_300,q_80`;
+  const cards = subjects.map((subject, index) => {
+    let poster = subject.cover?.url || subject.poster;
+    // Only process if poster exists
+    if (poster) {
+      // Optimize image URL for thumbnails - reduced size and quality for better performance
+      if (poster.includes('pbcdnw.aoneroom.com')) {
+        const separator = poster.includes('?') ? '&' : '?';
+        poster = `${poster}${separator}x-oss-process=image/resize,w_200,q_70`;
+      }
     }
     
     const subjectTitle = subject.title || 'Unknown';
@@ -302,17 +362,23 @@ function renderMovieSection(title, subjects) {
     // Check for English audio
     const hasEnglish = hasEnglishAudio(subject);
     
+    // Load first 12 images immediately (above fold), rest use lazy loading
+    // This ensures initial viewport images load quickly
+    const shouldLazyLoad = index > 11; // Load first 12 images immediately
+    const fetchPriority = index <= 11 ? 'fetchpriority="high"' : '';
+    const keepLoaded = index <= 11 ? 'data-keep-loaded="true"' : ''; // Prevent memory cleanup for above-fold images
+    
     return `
-      <div class="card movie-card" data-subject-id="${subjectId}" data-detail-path="${detailPath}">
+      <div class="card movie-card fade-in-up" data-subject-id="${subjectId}" data-detail-path="${detailPath}" style="animation-delay: ${index * 0.05}s;">
         <div class="position-relative movie-card-image-wrapper">
           <img 
-            src="${poster}" 
+            ${poster ? (shouldLazyLoad ? `data-src="${poster}"` : `src="${poster}" ${fetchPriority} ${keepLoaded}`) : ''}
             class="card-img-top movie-card-image" 
             alt="${subjectTitle}" 
-            loading="lazy" 
+            ${shouldLazyLoad ? '' : 'loading="lazy"'}
             decoding="async"
-            onerror="if (!this.dataset.failed) { this.dataset.failed = 'true'; if (this.src !== '/assets/images/placeholder.jpg') { this.src = '/assets/images/placeholder.jpg'; this.classList.add('loaded'); this.parentElement.classList.add('image-loaded'); } else { this.style.display = 'none'; } }"
-            onload="this.classList.add('loaded'); this.parentElement.classList.add('image-loaded');"
+            onerror="if (!this.dataset.failed) { this.dataset.failed = 'true'; this.style.display = 'none'; this.parentElement.style.minHeight = '200px'; }"
+            onload="this.classList.add('loaded'); this.parentElement.classList.add('image-loaded'); if (typeof imageLoadQueue !== 'undefined') { imageLoadQueue.loadedImages.add(this); }"
           >
           ${imdbDisplay ? `<span class="imdb-rating-badge">
             <i class="bi bi-star-fill"></i> ${imdbDisplay}
@@ -361,7 +427,7 @@ function renderNavbarBanner(items) {
   ).join('');
 
   const slides = items.slice(0, 5).map((item, index) => {
-    let image = item.image?.url || item.subject?.cover?.url || '/assets/images/placeholder.jpg';
+    let image = item.image?.url || item.subject?.cover?.url;
     if (image.includes('pbcdnw.aoneroom.com')) {
       const separator = image.includes('?') ? '&' : '?';
       image = `${image}${separator}x-oss-process=image/resize,w_400,q_85`;
@@ -424,10 +490,39 @@ function initializeBannerCarousel(carouselId) {
       ride: 'carousel'
     });
     
-    // Ensure carousel continues looping
-    carouselElement.addEventListener('slid.bs.carousel', function () {
-      // Carousel has slid, ensure it continues
+    // Load banner images when they become active (lazy loading)
+    carouselElement.addEventListener('slid.bs.carousel', function (event) {
+      const activeSlide = event.relatedTarget;
+      const bannerSlide = activeSlide.querySelector('.banner-slide');
+      
+      // Load high-quality image if it has data-bg-src
+      if (bannerSlide && bannerSlide.dataset.bgSrc) {
+        const highQualityUrl = bannerSlide.dataset.bgSrc.replace(/q_\d+/, 'q_85');
+        bannerSlide.style.backgroundImage = `url('${highQualityUrl}')`;
+        bannerSlide.removeAttribute('data-bg-src');
+      }
+      
+      // Preload next slide
+      const nextSlide = activeSlide.nextElementSibling;
+      if (nextSlide) {
+        const nextBannerSlide = nextSlide.querySelector('.banner-slide');
+        if (nextBannerSlide && nextBannerSlide.dataset.bgSrc) {
+          const nextImage = new Image();
+          nextImage.src = nextBannerSlide.dataset.bgSrc.replace(/q_\d+/, 'q_85');
+        }
+      }
     });
+    
+    // Preload first slide immediately if it has data-bg-src
+    const firstSlide = carouselElement.querySelector('.carousel-item.active');
+    if (firstSlide) {
+      const firstBannerSlide = firstSlide.querySelector('.banner-slide');
+      if (firstBannerSlide && firstBannerSlide.dataset.bgSrc) {
+        const highQualityUrl = firstBannerSlide.dataset.bgSrc.replace(/q_\d+/, 'q_85');
+        firstBannerSlide.style.backgroundImage = `url('${highQualityUrl}')`;
+        firstBannerSlide.removeAttribute('data-bg-src');
+      }
+    }
   }
 }
 
@@ -484,7 +579,7 @@ function renderMovieDetails(movieData) {
 
   const title = metadata.title || subject.title || 'Unknown';
   // Extract cover image - check multiple possible locations
-  let poster = '/assets/images/placeholder.jpg';
+  let poster = null;
   if (subject.cover && typeof subject.cover === 'object' && subject.cover.url) {
     poster = subject.cover.url;
   } else if (subject.cover && typeof subject.cover === 'string') {
@@ -565,14 +660,14 @@ function renderMovieDetails(movieData) {
 
   // Optimize poster for detail page (use medium size for card)
   let optimizedPoster = poster;
-  if (poster.includes('pbcdnw.aoneroom.com')) {
+  if (poster && poster.includes('pbcdnw.aoneroom.com')) {
     const separator = poster.includes('?') ? '&' : '?';
     optimizedPoster = `${poster}${separator}x-oss-process=image/resize,w_600,q_85`;
   }
   
   // Get backdrop image (full poster for hero background)
   let backdropImage = poster;
-  if (poster.includes('pbcdnw.aoneroom.com')) {
+  if (poster && poster.includes('pbcdnw.aoneroom.com')) {
     const separator = poster.includes('?') ? '&' : '?';
     backdropImage = `${poster}${separator}x-oss-process=image/resize,w_1920,q_80`;
   }
@@ -584,7 +679,7 @@ function renderMovieDetails(movieData) {
   
   container.innerHTML = `
     <!-- Hero Section -->
-    <div class="movie-hero-section" style="background-image: url('${backdropImage}');">
+    <div class="movie-hero-section viewport-slide-up" ${backdropImage ? `style="background-image: url('${backdropImage}');"` : 'style="background-color: var(--dark-surface);"'}>
       <div class="hero-overlay"></div>
       <div class="hero-gradient"></div>
       <div class="container-fluid px-3 px-md-4">
@@ -593,15 +688,15 @@ function renderMovieDetails(movieData) {
             <!-- Left: Poster + Metadata -->
             <div class="col-12 col-md-4 col-lg-3">
               <div class="movie-poster-container">
-                <img 
+                ${optimizedPoster ? `<img 
                   src="${optimizedPoster}" 
                   alt="${title}" 
                   class="img-fluid movie-detail-poster" 
                   loading="lazy"
                   decoding="async"
-                  onerror="if (!this.dataset.failed) { this.dataset.failed = 'true'; if (this.src !== '/assets/images/placeholder.jpg') { this.src = '/assets/images/placeholder.jpg'; } else { this.style.display = 'none'; } }"
+                  onerror="if (!this.dataset.failed) { this.dataset.failed = 'true'; this.style.display = 'none'; }"
                   onload="this.classList.add('loaded'); this.dataset.loaded = 'true';"
-                >
+                >` : ''}
               </div>
               
               <!-- Metadata: Rating, Release Date, Country -->
@@ -712,7 +807,7 @@ function renderMovieDetails(movieData) {
     
     <!-- Additional Info Section -->
     <div class="container-fluid px-3 px-md-4">
-      <div class="movie-detail-content">
+      <div class="movie-detail-content viewport-fade-in">
         ${keywordsList.length > 0 ? `
           <div class="movie-keywords mb-4">
             <h3 class="content-section-title">Keywords</h3>
@@ -769,7 +864,7 @@ function renderMovieDetails(movieData) {
     
     <!-- Recommendations Section -->
     <div class="container-fluid px-3 px-md-4">
-      <div id="recommendations-section" class="recommendations-section mt-5">
+      <div id="recommendations-section" class="recommendations-section mt-5 viewport-fade-in">
         <h3 class="section-title">Recommendations</h3>
         <div id="recommendations-content" class="movie-grid"></div>
       </div>
@@ -1357,10 +1452,412 @@ async function loadRecommendations(subjectId) {
   }
 }
 
+/**
+ * Image Loading Queue with Priority, Throttling, and Memory Management
+ * Limits concurrent image loads to improve performance and reduce RAM usage
+ */
+class ImageLoadQueue {
+  constructor(maxConcurrent = 4) {
+    this.queue = [];
+    this.loading = new Set();
+    this.failed = new Map(); // Track failed images for retry
+    this.maxConcurrent = maxConcurrent;
+    this.processTimeout = null;
+    this.memoryCleanupInterval = null;
+    this.loadedImages = new WeakSet(); // Track successfully loaded images
+  }
+  
+  /**
+   * Add image to queue with priority
+   * @param {HTMLElement} img - Image element
+   * @param {number} priority - Priority (higher = load first, default 5)
+   */
+  add(img, priority = 5) {
+    // Skip if already loading or loaded
+    if (this.loading.has(img) || img.src || !img.dataset.src) {
+      return;
+    }
+    
+    // Check if already in queue
+    const inQueue = this.queue.some(item => item.img === img);
+    if (inQueue) {
+      return;
+    }
+    
+    // Add to queue with priority
+    this.queue.push({ img, priority });
+    
+    // Sort queue by priority (higher first)
+    this.queue.sort((a, b) => b.priority - a.priority);
+    
+    // Process queue
+    this.processQueue();
+  }
+  
+  /**
+   * Process queue and load images up to maxConcurrent limit
+   */
+  processQueue() {
+    // Clear any pending timeout
+    if (this.processTimeout) {
+      clearTimeout(this.processTimeout);
+    }
+    
+    // Process queue
+    this.processTimeout = setTimeout(() => {
+      // Remove completed items from queue
+      this.queue = this.queue.filter(item => {
+        // Remove if image is already loading, loaded, or no longer has data-src
+        if (this.loading.has(item.img) || item.img.src || !item.img.dataset.src) {
+          return false;
+        }
+        return true;
+      });
+      
+      // Load images up to maxConcurrent limit
+      while (this.loading.size < this.maxConcurrent && this.queue.length > 0) {
+        const item = this.queue.shift();
+        if (item && item.img && item.img.dataset.src && !this.loading.has(item.img)) {
+          this.loadImage(item.img);
+        }
+      }
+      
+      // If queue still has items and we have capacity, schedule next batch
+      if (this.queue.length > 0 && this.loading.size < this.maxConcurrent) {
+        this.processQueue();
+      }
+    }, 10);
+  }
+  
+  /**
+   * Load a single image with retry mechanism
+   * @param {HTMLElement} img - Image element
+   * @param {number} retryCount - Number of retries attempted
+   */
+  loadImage(img, retryCount = 0) {
+    if (!img || !img.dataset.src || this.loading.has(img)) {
+      return;
+    }
+    
+    // Mark as loading
+    this.loading.add(img);
+    
+    // Create new Image object to preload
+    const imageLoader = new Image();
+    
+    // Set timeout for slow-loading images (10 seconds)
+    const timeout = setTimeout(() => {
+      if (this.loading.has(img)) {
+        imageLoader.onload = null;
+        imageLoader.onerror = null;
+        this.handleImageError(img, retryCount);
+      }
+    }, 10000);
+    
+    // Handle load success
+    imageLoader.onload = () => {
+      clearTimeout(timeout);
+      
+      // Set src on actual image element
+      img.src = img.dataset.src;
+      img.removeAttribute('data-src');
+      img.classList.add('loaded');
+      this.loadedImages.add(img);
+      
+      // Add fade-in animation
+      img.style.opacity = '0';
+      img.style.transition = 'opacity 0.3s ease-in';
+      setTimeout(() => {
+        img.style.opacity = '1';
+      }, 10);
+      
+      // Remove from loading set and failed map
+      this.loading.delete(img);
+      this.failed.delete(img);
+      
+      // Continue processing queue
+      this.processQueue();
+    };
+    
+    // Handle load error
+    imageLoader.onerror = () => {
+      clearTimeout(timeout);
+      this.handleImageError(img, retryCount);
+    };
+    
+    // Start loading
+    imageLoader.src = img.dataset.src;
+  }
+  
+  /**
+   * Handle image load error with retry mechanism
+   * @param {HTMLElement} img - Image element
+   * @param {number} retryCount - Number of retries attempted
+   */
+  handleImageError(img, retryCount) {
+    // Remove from loading set
+    this.loading.delete(img);
+    
+    // Retry once if not already retried
+    if (retryCount === 0 && img.dataset.src) {
+      this.failed.set(img, Date.now());
+      // Retry after a short delay (500ms)
+      setTimeout(() => {
+        if (img.dataset.src && !img.src) {
+          this.loadImage(img, 1);
+        }
+      }, 500);
+      return;
+    }
+    
+    // After retry failed or max retries reached, hide image but keep wrapper
+    img.style.display = 'none';
+    if (img.parentElement) {
+      img.parentElement.style.minHeight = '200px';
+    }
+    img.dataset.failed = 'true';
+    
+    // Continue processing queue
+    this.processQueue();
+  }
+  
+  /**
+   * Remove image from queue (if not yet loading)
+   * @param {HTMLElement} img - Image element
+   */
+  remove(img) {
+    this.queue = this.queue.filter(item => item.img !== img);
+  }
+  
+  /**
+   * Memory management: Unload images far from viewport to free RAM
+   */
+  startMemoryManagement() {
+    if (this.memoryCleanupInterval) {
+      return; // Already started
+    }
+    
+    this.memoryCleanupInterval = setInterval(() => {
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+      const unloadDistance = viewportHeight * 3; // Unload images 3 viewport heights away
+      
+      // Find all loaded images
+      document.querySelectorAll('img[src]:not([data-src])').forEach(img => {
+        if (this.loadedImages.has(img)) {
+          const rect = img.getBoundingClientRect();
+          const distanceFromViewport = Math.min(
+            Math.abs(rect.top - viewportHeight),
+            Math.abs(rect.bottom)
+          );
+          
+          // If image is far from viewport, convert back to lazy loading
+          if (distanceFromViewport > unloadDistance && !img.dataset.keepLoaded) {
+            const currentSrc = img.src;
+            img.src = '';
+            img.dataset.src = currentSrc;
+            img.style.display = '';
+            img.classList.remove('loaded');
+            img.style.opacity = '0';
+            
+            // Re-add to queue with lower priority
+            this.add(img, 1);
+          }
+        }
+      });
+    }, 10000); // Run every 10 seconds
+  }
+}
+
+// Global image load queue instance with increased concurrency
+const imageLoadQueue = new ImageLoadQueue(4);
+
+/**
+ * Setup lazy loading for images using Intersection Observer
+ */
+function setupLazyLoading() {
+  // Check if Intersection Observer is supported
+  if (!('IntersectionObserver' in window)) {
+    // Fallback: load all images immediately
+    document.querySelectorAll('img[data-src]').forEach(img => {
+      if (img.dataset.src) {
+        img.src = img.dataset.src;
+        img.removeAttribute('data-src');
+      }
+    });
+    return;
+  }
+
+  // Create Intersection Observer with 50px root margin (reduced from 100px)
+  const imageObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const img = entry.target;
+        
+        // Calculate priority based on distance from viewport top
+        const rect = img.getBoundingClientRect();
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        const distanceFromTop = rect.top;
+        // Higher priority for images closer to viewport top
+        // Priority 10 = visible or very close, 8 = near viewport, 5 = further away
+        let priority = 5;
+        if (distanceFromTop < viewportHeight * 0.5) {
+          priority = 10; // Very close or visible
+        } else if (distanceFromTop < viewportHeight * 1.5) {
+          priority = 8; // Near viewport
+        }
+        
+        // Add to queue instead of loading immediately
+        if (img.dataset.src) {
+          imageLoadQueue.add(img, priority);
+        }
+        
+        // For background images (load immediately, no queue needed)
+        if (img.dataset.bgSrc) {
+          img.style.backgroundImage = `url('${img.dataset.bgSrc}')`;
+          img.removeAttribute('data-bg-src');
+        }
+        
+        // Don't unobserve immediately - keep observing to handle scroll back
+        // Only unobserve if image is loaded or failed
+        if (img.src || img.dataset.failed === 'true') {
+          observer.unobserve(img);
+        }
+      }
+    });
+  }, {
+    rootMargin: '100px', // Load images 100px before entering viewport for smoother experience
+    threshold: 0.01
+  });
+
+  // Observe all images with data-src or data-bg-src
+  document.querySelectorAll('img[data-src], [data-bg-src]').forEach(img => {
+    imageObserver.observe(img);
+  });
+
+  // Re-observe when new content is added
+  const homeSections = document.getElementById('home-sections');
+  if (homeSections) {
+    const sectionObserver = new MutationObserver(() => {
+      // Observe newly added images
+      homeSections.querySelectorAll('img[data-src], [data-bg-src]').forEach(img => {
+        if (!img.classList.contains('observed')) {
+          img.classList.add('observed');
+          imageObserver.observe(img);
+        }
+      });
+    });
+
+    sectionObserver.observe(homeSections, {
+      childList: true,
+      subtree: true
+    });
+  }
+  
+  // Also observe movie detail container
+  const movieDetail = document.getElementById('movie-detail');
+  if (movieDetail) {
+    const detailObserver = new MutationObserver(() => {
+      movieDetail.querySelectorAll('img[data-src], [data-bg-src]').forEach(img => {
+        if (!img.classList.contains('observed')) {
+          img.classList.add('observed');
+          imageObserver.observe(img);
+        }
+      });
+    });
+
+    detailObserver.observe(movieDetail, {
+      childList: true,
+      subtree: true
+    });
+  }
+  
+  // Start memory management to unload images far from viewport
+  imageLoadQueue.startMemoryManagement();
+  
+  // Ensure all images eventually load - process queue periodically
+  setInterval(() => {
+    if (imageLoadQueue.queue.length > 0 && imageLoadQueue.loading.size < imageLoadQueue.maxConcurrent) {
+      imageLoadQueue.processQueue();
+    }
+  }, 2000); // Check every 2 seconds
+}
+
+/**
+ * Setup viewport animations using Intersection Observer
+ */
+function setupViewportAnimations() {
+  // Check if Intersection Observer is supported
+  if (!('IntersectionObserver' in window)) {
+    // Fallback: show all elements immediately
+    document.querySelectorAll('.movie-section, .banner-section, .movie-card, .viewport-fade-in, .viewport-slide-up').forEach(el => {
+      el.classList.add('visible');
+    });
+    return;
+  }
+
+  // Create Intersection Observer for viewport animations
+  const animationObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        // Unobserve after animation to improve performance
+        animationObserver.unobserve(entry.target);
+      }
+    });
+  }, {
+    rootMargin: '50px', // Start animation 50px before entering viewport
+    threshold: 0.1 // Trigger when 10% of element is visible
+  });
+
+  // Observe sections and cards
+  const observeElements = () => {
+    document.querySelectorAll('.movie-section:not(.visible), .banner-section:not(.visible), .movie-card:not(.visible), .viewport-fade-in:not(.visible), .viewport-slide-up:not(.visible)').forEach(el => {
+      animationObserver.observe(el);
+    });
+  };
+
+  // Initial observation
+  observeElements();
+
+  // Re-observe when new content is added (for progressive loading)
+  const homeSections = document.getElementById('home-sections');
+  if (homeSections) {
+    const sectionObserver = new MutationObserver(() => {
+      observeElements();
+    });
+
+    sectionObserver.observe(homeSections, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  // Also observe movie detail container
+  const movieDetail = document.getElementById('movie-detail');
+  if (movieDetail) {
+    const detailObserver = new MutationObserver(() => {
+      observeElements();
+    });
+
+    detailObserver.observe(movieDetail, {
+      childList: true,
+      subtree: true
+    });
+  }
+}
+
 // Initialize on page load
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initApp);
+  document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+    // Setup lazy loading after initial render
+    setTimeout(setupLazyLoading, 100);
+    // Setup viewport animations
+    setTimeout(setupViewportAnimations, 200);
+  });
 } else {
   initApp();
+  setTimeout(setupLazyLoading, 100);
+  setTimeout(setupViewportAnimations, 200);
 }
 

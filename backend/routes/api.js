@@ -882,8 +882,110 @@ router.get('/recommendations/:subjectId', async (req, res) => {
 });
 
 /**
+ * HEAD /api/download-proxy
+ * Handles HEAD requests for download capability checking (used by IDM and other download managers)
+ * This allows download managers to check if multi-connection downloads are supported
+ */
+router.head('/download-proxy', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url) {
+      return res.status(400).end();
+    }
+
+    // Get cookies
+    let cookies = req.query.cookies || null;
+    if (!cookies) {
+      const { ensureCookiesAreAssigned } = require('../utils/proxy');
+      cookies = await ensureCookiesAreAssigned();
+    }
+
+    // Get headers without Range (HEAD requests don't need Range)
+    const headers = getMediaDownloadHeaders(url, cookies, "bytes=0-");
+    delete headers.Range; // HEAD requests don't use Range
+
+    // Make HEAD request to source
+    const headResponse = await axios.head(url, {
+      headers: headers,
+      timeout: 10000,
+      maxRedirects: 5,
+      validateStatus: (status) => status < 500,
+    });
+
+    // Set CORS headers
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type, Accept-Ranges');
+
+    // Forward important headers
+    const contentType = headResponse.headers['content-type'] || 'video/mp4';
+    res.setHeader('Content-Type', contentType);
+    
+    // CRITICAL: Always advertise Range support for multi-connection downloads
+    res.setHeader('Accept-Ranges', 'bytes');
+    
+    // Forward Content-Length if available
+    if (headResponse.headers['content-length']) {
+      res.setHeader('Content-Length', headResponse.headers['content-length']);
+    }
+
+    // Set Content-Disposition if we can generate filename
+    const { generateMediaFilename, extractExtension } = require('../utils/filename');
+    const { detailPath, subjectId, season, episode, title, quality, resolution } = req.query;
+    
+    if (detailPath && subjectId) {
+      try {
+        const { fetchMovieDetailsFromHTML } = require('../utils/parser');
+        const movieDetails = await fetchMovieDetailsFromHTML(detailPath, subjectId);
+        const movieTitle = title || 
+          (movieDetails?.resData?.metadata?.title) || 
+          (movieDetails?.resData?.subject?.title) || 
+          null;
+        const releaseDate = movieDetails?.resData?.subject?.releaseDate || 
+                           movieDetails?.resData?.metadata?.releaseDate;
+        const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
+        const extension = extractExtension(url, contentType);
+        let resValue = resolution;
+        if (!resValue && quality && quality !== 'BEST' && quality !== 'WORST') {
+          resValue = quality;
+        }
+        
+        if (movieTitle) {
+          const filename = generateMediaFilename({
+            title: movieTitle,
+            year: year,
+            season: season,
+            episode: episode,
+            resolution: resValue,
+            quality: quality,
+            extension: extension
+          });
+          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+        }
+      } catch (err) {
+        // Ignore errors in filename generation for HEAD requests
+      }
+    }
+
+    // Return same status as source
+    res.status(headResponse.status).end();
+  } catch (error) {
+    console.error('HEAD request error:', error.message);
+    if (!res.headersSent) {
+      res.status(error.response?.status || 500).end();
+    }
+  }
+});
+
+/**
  * GET /api/download-proxy
- * Proxies media file downloads with proper headers
+ * Proxies media file downloads with proper headers and multi-connection support
  * Query params: url, detailPath (optional, for filename), subjectId, season, episode, title, quality, resolution
  * 
  * Headers used for downloading movies:
@@ -891,6 +993,11 @@ router.get('/recommendations/:subjectId', async (req, res) => {
  * - User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:137.0) Gecko/20100101 Firefox/137.0
  * - Origin: [The selected Moviebox host, e.g., https://h5.aoneroom.com]
  * - Referer: https://fmoviesunblocked.net/
+ * 
+ * Supports:
+ * - Range requests (206 Partial Content) for multi-connection downloads
+ * - HEAD requests for capability checking
+ * - Proper Accept-Ranges header advertising
  */
 router.get('/download-proxy', async (req, res) => {
   // Log ALL requests to download-proxy (even before try block to catch everything)
@@ -923,47 +1030,26 @@ router.get('/download-proxy', async (req, res) => {
       console.log('No cookies in query, using global cookies:', cookies ? 'YES' : 'NO');
     }
     
-    // Get Range header from client request, or default to bytes=0-
-    const range = req.headers.range || "bytes=0-";
+    // Get Range header from client request (for multi-connection downloads)
+    const clientRange = req.headers.range;
     
-    // Get media download headers with cookies and range
-    // These are DIFFERENT from metadata headers - MovieBox requires strict headers for downloads
-    const headers = getMediaDownloadHeaders(url, cookies, range);
-
-    // CRITICAL: This is the ACTUAL MEDIA FILE download request (not metadata!)
-    console.log('=== MEDIA FILE DOWNLOAD REQUEST ===');
-    console.log('Media download request started:', {
-      url: url.substring(0, 150) + (url.length > 150 ? '...' : ''),
-      urlLength: url.length,
-      hasCookies: !!cookies,
-      cookiesPreview: cookies ? cookies.substring(0, 100) + '...' : 'NO COOKIES (may fail!)',
-      cookiesFull: cookies, // Log full cookies for debugging
-      range: range,
-      headers: {
-        referer: headers.Referer,
-        origin: headers.Origin,
-        userAgent: headers['User-Agent'],
-        accept: headers.Accept,
-        hasRange: !!headers.Range,
-        hasCookieHeader: !!headers.Cookie,
-      },
-    });
-
-    // Validate file availability with HEAD request before downloading
-    // This checks if the file exists and is accessible before streaming
+    // First, get file info with HEAD request to check Content-Length
+    // This is needed for Range request handling
+    let contentLength = null;
     try {
-      const headHeaders = { ...headers };
-      delete headHeaders.Range; // HEAD requests don't need Range header
+      const headHeaders = getMediaDownloadHeaders(url, cookies, "bytes=0-");
+      delete headHeaders.Range; // HEAD requests don't need Range
       
-      console.log('Validating file availability with HEAD request...');
       const headResponse = await axios.head(url, {
         headers: headHeaders,
-        timeout: 10000, // 10 seconds for validation
+        timeout: 10000,
         maxRedirects: 5,
-        validateStatus: (status) => status < 500, // Don't throw on 4xx, we'll handle it
+        validateStatus: (status) => status < 500,
       });
       
-      // Check for various error conditions
+      contentLength = headResponse.headers['content-length'];
+      
+      // Check for errors in HEAD response
       if (headResponse.status === 404) {
         console.error('File not found (404) on CDN');
         return res.status(404).json({
@@ -973,13 +1059,8 @@ router.get('/download-proxy', async (req, res) => {
       }
       
       if (headResponse.status === 403) {
-        // Could be region restriction or expired URL
         const isExpired = url.includes('sign=') || url.includes('&t=');
-        console.error('Access forbidden (403):', {
-          isExpired: isExpired,
-          urlPreview: url.substring(0, 100) + '...',
-        });
-        
+        console.error('Access forbidden (403):', { isExpired });
         if (isExpired) {
           return res.status(410).json({
             error: 'Download URL expired',
@@ -1012,7 +1093,7 @@ router.get('/download-proxy', async (req, res) => {
       console.log('File validation successful:', {
         status: headResponse.status,
         contentType: headResponse.headers['content-type'],
-        contentLength: headResponse.headers['content-length'],
+        contentLength: contentLength,
       });
     } catch (validationError) {
       // Handle validation errors
@@ -1046,10 +1127,153 @@ router.get('/download-proxy', async (req, res) => {
         }
       }
       
-      // For other validation errors (timeout, network, etc.), log but continue
-      // The actual download request will handle these
+      // For other validation errors, log but continue
       console.warn('File validation warning (continuing with download):', validationError.message);
     }
+    
+    // Handle Range requests for multi-connection downloads (206 Partial Content)
+    if (clientRange && contentLength) {
+      // Parse Range header (e.g., "bytes=0-1023" or "bytes=1024-")
+      const rangeMatch = clientRange.match(/bytes=(\d+)-(\d*)/);
+      if (rangeMatch) {
+        const start = parseInt(rangeMatch[1], 10);
+        const end = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : parseInt(contentLength, 10) - 1;
+        
+        // Validate range
+        if (start >= parseInt(contentLength, 10) || start < 0) {
+          // Set CORS headers
+          const origin = req.headers.origin;
+          if (origin) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+          } else {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+          }
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.status(416).setHeader('Content-Range', `bytes */${contentLength}`).end();
+          return;
+        }
+        
+        // If end is beyond file size, adjust it
+        const actualEnd = Math.min(end, parseInt(contentLength, 10) - 1);
+        const actualChunkSize = actualEnd - start + 1;
+        
+        // Get headers with specific range
+        const rangeHeaders = getMediaDownloadHeaders(url, cookies, `bytes=${start}-${actualEnd}`);
+        
+        // Make Range request to source
+        try {
+          const rangeResponse = await axios.get(url, {
+            headers: rangeHeaders,
+            responseType: 'stream',
+            timeout: 300000,
+            maxRedirects: 5,
+          });
+          
+          // Set CORS headers
+          const origin = req.headers.origin;
+          if (origin) {
+            res.setHeader('Access-Control-Allow-Origin', origin);
+            res.setHeader('Access-Control-Allow-Credentials', 'true');
+          } else {
+            res.setHeader('Access-Control-Allow-Origin', '*');
+          }
+          res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type, Accept-Ranges, Content-Range');
+          
+          // CRITICAL: Always advertise Range support
+          res.setHeader('Accept-Ranges', 'bytes');
+          
+          // Return 206 Partial Content for Range requests
+          res.status(206);
+          res.setHeader('Content-Range', `bytes ${start}-${actualEnd}/${contentLength}`);
+          res.setHeader('Content-Length', actualChunkSize);
+          
+          const contentType = rangeResponse.headers['content-type'] || 'video/mp4';
+          res.setHeader('Content-Type', contentType);
+          
+          // Generate filename (same logic as full download)
+          const { generateMediaFilename, extractExtension } = require('../utils/filename');
+          let filename = null;
+          let movieDetails = null;
+          if (detailPath && subjectId) {
+            try {
+              const { fetchMovieDetailsFromHTML } = require('../utils/parser');
+              movieDetails = await fetchMovieDetailsFromHTML(detailPath, subjectId);
+            } catch (err) {
+              console.warn('Could not fetch movie details for filename:', err.message);
+            }
+          }
+          const movieTitle = title || 
+            (movieDetails?.resData?.metadata?.title) || 
+            (movieDetails?.resData?.subject?.title) || 
+            null;
+          const releaseDate = movieDetails?.resData?.subject?.releaseDate || 
+                           movieDetails?.resData?.metadata?.releaseDate;
+          const year = releaseDate ? new Date(releaseDate).getFullYear() : null;
+          const extension = extractExtension(url, contentType);
+          let resValue = resolution;
+          if (!resValue && quality && quality !== 'BEST' && quality !== 'WORST') {
+            resValue = quality;
+          }
+          if (movieTitle) {
+            filename = generateMediaFilename({
+              title: movieTitle,
+              year: year,
+              season: season,
+              episode: episode,
+              resolution: resValue,
+              quality: quality,
+              extension: extension
+            });
+          }
+          if (!filename) {
+            const urlParts = url.split('/');
+            filename = urlParts[urlParts.length - 1].split('?')[0];
+          }
+          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+          
+          // Stream the range
+          rangeResponse.data.pipe(res);
+          
+          rangeResponse.data.on('error', (streamError) => {
+            console.error('Range stream error:', streamError.message);
+          });
+          
+          rangeResponse.data.on('end', () => {
+            console.log(`Range ${start}-${actualEnd} stream completed`);
+          });
+          
+          return; // Exit early for Range requests
+        } catch (rangeError) {
+          console.error('Range request error:', rangeError.message);
+          // Fall through to full download on Range error
+        }
+      }
+    }
+    
+    // For non-Range requests, download full file
+    const range = clientRange || "bytes=0-";
+    const headers = getMediaDownloadHeaders(url, cookies, range);
+
+    // CRITICAL: This is the ACTUAL MEDIA FILE download request (not metadata!)
+    console.log('=== MEDIA FILE DOWNLOAD REQUEST ===');
+    console.log('Media download request started:', {
+      url: url.substring(0, 150) + (url.length > 150 ? '...' : ''),
+      urlLength: url.length,
+      hasCookies: !!cookies,
+      cookiesPreview: cookies ? cookies.substring(0, 100) + '...' : 'NO COOKIES (may fail!)',
+      cookiesFull: cookies, // Log full cookies for debugging
+      range: range,
+      headers: {
+        referer: headers.Referer,
+        origin: headers.Origin,
+        userAgent: headers['User-Agent'],
+        accept: headers.Accept,
+        hasRange: !!headers.Range,
+        hasCookieHeader: !!headers.Cookie,
+      },
+    });
+
 
     // Fetch the file with proper headers
     let response;
@@ -1124,11 +1348,20 @@ router.get('/download-proxy', async (req, res) => {
       // Allow requests with no origin (like direct downloads)
       res.setHeader('Access-Control-Allow-Origin', '*');
     }
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type, Accept-Ranges, Content-Range');
+    
+    // CRITICAL: Always advertise Range support for multi-connection downloads (IDM requirement)
+    res.setHeader('Accept-Ranges', 'bytes');
     
     // Set appropriate headers for download
     const contentType = response.headers['content-type'] || 'video/mp4';
     res.setHeader('Content-Type', contentType);
+    
+    // For non-Range requests, stream entire file
+    const responseContentLength = response.headers['content-length'];
+    if (responseContentLength) {
+      res.setHeader('Content-Length', responseContentLength);
+    }
     
     // Generate filename based on available metadata
     const { generateMediaFilename, extractExtension } = require('../utils/filename');
@@ -1185,12 +1418,8 @@ router.get('/download-proxy', async (req, res) => {
     
     // Set Content-Disposition header with proper filename
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-    
-    if (response.headers['content-length']) {
-      res.setHeader('Content-Length', response.headers['content-length']);
-    }
 
-    // Pipe the response
+    // Pipe the response (for full file downloads without Range)
     response.data.pipe(res);
     
     // Log when streaming starts
