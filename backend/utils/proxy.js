@@ -198,7 +198,13 @@ async function makeRequest(endpoint, options = {}) {
             proxyHeaders['x-api-key'] = PROXY_API_KEY;
           }
           
-          console.log('Routing through proxy:', PROXY_SERVER_URL);
+          console.log('Routing through proxy:', url);
+          console.log('Target URL being proxied:', targetUrl);
+          console.log('Proxy headers:', {
+            cookie: proxyHeaders['Cookie'] ? proxyHeaders['Cookie'].substring(0, 50) + '...' : 'none',
+            referer: proxyHeaders['Referer'] || 'none',
+            origin: proxyHeaders['Origin'] || 'none',
+          });
         } else {
           // Direct connection
           url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.replace(/^\//, '')}`;
