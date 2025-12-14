@@ -124,6 +124,9 @@ function mergeCookies(existingCookies, newCookies) {
  * @returns {Promise} Axios response
  */
 async function makeRequest(endpoint, options = {}) {
+  const PROXY_SERVER_URL = process.env.PROXY_SERVER_URL; // e.g., "http://your-alibaba-ip:3001" or "https://proxy.yourdomain.com"
+  const PROXY_API_KEY = process.env.PROXY_API_KEY; // Your secret API key
+
   const {
     method = 'GET',
     data = null,
@@ -172,12 +175,39 @@ async function makeRequest(endpoint, options = {}) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     for (const baseUrl of hosts) {
       try {
-        const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.replace(/^\//, '')}`;
+        let url;
+        let proxyHeaders = { ...requestHeaders };
+        
+        if (PROXY_SERVER_URL) {
+          // Route through proxy server
+          const targetEndpoint = endpoint.startsWith('http') 
+            ? endpoint 
+            : `${baseUrl}${endpoint.replace(/^\//, '')}`;
+          
+          // Build target URL with query parameters if they exist
+          let targetUrl = targetEndpoint;
+          if (params && Object.keys(params).length > 0) {
+            const queryString = new URLSearchParams(params).toString();
+            targetUrl += (targetUrl.includes('?') ? '&' : '?') + queryString;
+          }
+          
+          url = `${PROXY_SERVER_URL}?url=${encodeURIComponent(targetUrl)}`;
+          
+          // Add API key header if configured
+          if (PROXY_API_KEY) {
+            proxyHeaders['x-api-key'] = PROXY_API_KEY;
+          }
+          
+          console.log('Routing through proxy:', PROXY_SERVER_URL);
+        } else {
+          // Direct connection
+          url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.replace(/^\//, '')}`;
+        }
         
         const config = {
           method,
           url,
-          headers: requestHeaders,
+          headers: proxyHeaders,
           timeout: 60000, // 60 seconds (increased for Vercel)
           // Enable cookie handling - axios will automatically handle Set-Cookie headers
           withCredentials: false, // We'll manually extract cookies
@@ -187,7 +217,8 @@ async function makeRequest(endpoint, options = {}) {
           config.data = data;
         }
 
-        if (params) {
+        // Only add params if NOT using proxy (proxy already includes them in the url parameter)
+        if (params && !PROXY_SERVER_URL) {
           config.params = params;
         }
 
